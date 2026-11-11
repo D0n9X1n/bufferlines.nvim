@@ -1,0 +1,77 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+env:
+  PLENARY_SHA: 74b06c6c75e4eeb3108ec01852001636d85a932b
+  DEVICONS_SHA: ec309a0eaff6ea967e58c275996155ab5c16938d
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: JohnnyMorganz/stylua-action@76fd70c03e6340ceaf673366712db9b20560b402 # v5.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          version: v2.5.2
+          args: --check --config-path=stylua.toml lua/
+      - name: actionlint
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v1.7.12 --repo rhysd/actionlint --pattern 'actionlint_1.7.12_linux_amd64.tar.gz' --pattern 'actionlint_1.7.12_checksums.txt'
+          grep linux_amd64.tar.gz actionlint_1.7.12_checksums.txt | sha256sum -c -
+          tar -xzf actionlint_1.7.12_linux_amd64.tar.gz actionlint
+          ./actionlint
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - run: |
+          python3 scripts/gen_help.py --check
+          python3 scripts/test_docs.py
+          python3 scripts/test_wiki_sync.py
+          python3 scripts/check_wiki.py
+          python3 scripts/test_check_wiki.py
+          python3 scripts/test_workflows.py
+          scripts/test_release.sh
+          git diff --check "$(git hash-object -t tree /dev/null)" HEAD
+  native:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { version: v0.8.3, asset: nvim-linux64.tar.gz }
+          - { version: v0.9.5, asset: nvim-linux64.tar.gz }
+          - { version: v0.10.4, asset: nvim-linux-x86_64.tar.gz }
+          - { version: v0.11.7, asset: nvim-linux-x86_64.tar.gz }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: scripts/ci-setup.sh ${{ matrix.version }} ${{ matrix.asset }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - run: nvim --version | head -1 && scripts/native-specs.sh
+  full:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: scripts/ci-setup.sh v0.12.6 nvim-linux-x86_64.tar.gz
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - run: nvim --version | head -1 && scripts/plenary.sh
+  ci:
+    if: always()
+    needs: [lint, docs, native, full]
+    runs-on: ubuntu-latest
+    steps:
+      - run: '[ "${{ contains(needs.*.result, ''failure'') || contains(needs.*.result, ''cancelled'') || contains(needs.*.result, ''skipped'') }}" = false ]'

@@ -1,0 +1,4 @@
+.luacheckcache
+screenshots/
+.tests/
+__pycache__/

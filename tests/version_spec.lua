@@ -1,0 +1,7 @@
+describe("version", function()
+  it("is semver 1.0.0", function()
+    local v = require("bufferlines.version")
+    assert.equals("1.0.0", v)
+    assert.truthy(v:match("^%d+%.%d+%.%d+$"))
+  end)
+end)

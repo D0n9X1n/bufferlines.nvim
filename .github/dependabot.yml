@@ -1,0 +1,9 @@
+version: 2
+updates:
+  # Actions are pinned to full SHAs with a version comment; Dependabot rewrites both.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 4
+    labels: [dependencies, ci]

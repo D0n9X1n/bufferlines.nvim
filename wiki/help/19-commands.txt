@@ -1,0 +1,13 @@
+==============================================================================
+COMMANDS                                               *bufferlines-commands*
+
+Bufferlines includes a few commands to allow deleting buffers. These commands
+are:
+
+* `BufferLinesCloseRight` - close all visible buffers to the right of the
+  current buffer
+* `BufferLinesCloseLeft` - close all visible buffers to the left of the current
+  buffer
+* `BufferLinesCloseOthers` - close all other visible buffers
+
+These commands apply the configured `close_command` to each of the corresponding buffers.

@@ -1,0 +1,18 @@
+==============================================================================
+GROUP COMMANDS                                     *bufferlines-group-commands*
+
+Grouped buffers can also be interacted with using a few commands namely
+* `:BufferLinesGroupClose` <tab> - which will close all buffers in this group
+* `:BufferLinesGroupToggle` <tab> - which will hide or show a group
+
+Other group related functionality can be implemented using the
+`require('bufferlines').group_action` API.
+
+e.g.
+>lua
+    function _G.__group_open()
+        require('bufferlines').group_action(<GROUP_NAME>, function(buf)
+            vim.cmd('vsplit '..buf.path)
+        end)
+    end
+<

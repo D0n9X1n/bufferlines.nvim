@@ -1,0 +1,18 @@
+==============================================================================
+TABPAGES                                                          *bufferlines-tabpages*
+
+This plugin can also be set to show only tabpages. This can be done by setting
+the `mode` option to `tabs`. This will change the bufferlines to a tabline it
+has a lot of the same features/styling but not all. A few things to note are
+
+* Sorting doesn't work yet as that needs to be thought through.
+* Grouping doesn't work yet as that also needs to be thought through.
+
+`BufferLinesTabRename`
+
+Tabs can be renamed using the `BufferLinesTabRename` command:
+
+e.g.
+
+- Rename the current tab: `BufferLinesTabRename Code`
+- Rename a tab based on it's `tabnr`: `BufferLinesTabRename 1 Code`

@@ -1,0 +1,22 @@
+==============================================================================
+CUSTOM-FUNCTIONS                                     *bufferlines-functions*
+
+A user can also execute arbitrary functions against a buffer using the
+`exec` function. For example
+
+>lua
+    require('bufferlines').exec(
+        4, -- the forth visible buffer from the left
+        user_function -- an arbitrary user function which gets passed the buffer
+    )
+
+    -- e.g.
+    function _G.bdel(num)
+        require('bufferlines').exec(num, function(buf, visible_buffers)
+            vim.cmd('bdelete '..buf.id)
+        end)
+    end
+
+    vim.cmd [[
+        command -count Bdel <Cmd>lua _G.bdel(<count>)<CR>
+    ]]

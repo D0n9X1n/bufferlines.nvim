@@ -1,0 +1,51 @@
+name: Bug report
+description: Something doesn't work
+labels: [bug]
+body:
+  - type: input
+    id: nvim
+    attributes:
+      label: Neovim version
+      description: Output of `nvim --version | head -1`
+      placeholder: NVIM v0.12.6
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: bufferlines.nvim version
+      placeholder: v1.0.0 / commit SHA
+    validations:
+      required: true
+  - type: dropdown
+    id: renderer
+    attributes:
+      label: Renderer
+      options: [Native single row (default), Multiline]
+    validations:
+      required: true
+  - type: textarea
+    id: config
+    attributes:
+      label: Minimal config
+      description: The smallest `require("bufferlines").setup({...})` that reproduces the problem
+      render: lua
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected vs actual
+    validations:
+      required: true
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots / messages
+      description: Include `:messages` output if there was an error

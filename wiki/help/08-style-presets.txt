@@ -1,0 +1,28 @@
+==============================================================================
+STYLE PRESETS                                        *bufferlines-style-presets*
+
+You also use one of the pre-defined rulesets i.e. preset for the bufferlines
+e.g. you can remove all bold text by setting the `options.style_preset` to
+`require('bufferlines').style_preset.no_bold` or `no_italic`.
+There are also more stylistic presets such as `minimal` which makes the foreground
+match the background so that only the text of the buffers is visible and the
+bufferlines is more unobtrusive.
+
+e.g.
+>lua
+    local bufferlines = require('bufferlines')
+    bufferlines.setup({
+        options = {
+            style_preset = bufferlines.style_preset.no_italic,
+            -- or you can combine these e.g.
+            style_preset = {
+                bufferlines.style_preset.no_italic,
+                bufferlines.style_preset.no_bold
+            },
+        }
+    })
+<
+The available options are
+ - `no_italic`
+ - `no_bold`
+ - `minimal`

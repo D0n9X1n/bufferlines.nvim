@@ -1,0 +1,32 @@
+name: Publish wiki
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: publish-wiki
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: python3 scripts/check_wiki.py && python3 scripts/test_wiki_sync.py
+  publish:
+    needs: validate
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - env:
+          WIKI_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WIKI_GIT_USER: ${{ github.actor }}
+        run: scripts/publish-wiki.sh wiki "https://github.com/${GITHUB_REPOSITORY}.wiki.git" "$GITHUB_SHA"

@@ -1,0 +1,26 @@
+==============================================================================
+CONTENTS                                      *bufferlines*
+*bufferlines-contents*
+
+Introduction...........................: |bufferlines-introduction|
+Usage..................................: |bufferlines-usage|
+Configuration..........................: |bufferlines-configuration|
+Multiline buffer tabs..................: |bufferlines-multiline|
+Hover Events...........................: |bufferlines-hover-events|
+Styling................................: |bufferlines-styling|
+Style Presets..........................: |bufferlines-style-presets|
+Tabpages...............................: |bufferlines-tabpages|
+Numbers................................: |bufferlines-numbers|
+LSP Diagnostics........................: |bufferlines-diagnostics|
+Groups.................................: |bufferlines-groups|
+Sorting................................: |bufferlines-sorting|
+Filtering..............................: |bufferlines-filtering|
+Commands...............................: |bufferlines-commands|
+Custom functions.......................: |bufferlines-functions|
+Pick...................................: |bufferlines-pick|
+Mappings...............................: |bufferlines-mappings|
+Highlights.............................: |bufferlines-highlights|
+Mouse actions..........................: |bufferlines-mouse-actions|
+Custom areas...........................: |bufferlines-custom-areas|
+Working with Elements..................: |bufferlines-working-with-elements|
+Issues.................................: |bufferlines-issues|

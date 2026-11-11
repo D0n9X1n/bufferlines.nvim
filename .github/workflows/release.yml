@@ -1,0 +1,44 @@
+name: Release
+on:
+  push:
+    tags: ['v*.*.*']
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: version
+        run: scripts/release-gate.sh version "$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+      - run: |
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          scripts/release-gate.sh on-main "$GITHUB_REF_NAME"
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/release-gate.sh ci "$(git rev-parse "${GITHUB_REF_NAME}^{commit}")"
+  publish:
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - run: scripts/release-notes.sh "$GITHUB_REF_NAME" > RELEASE_NOTES.md
+      - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: bufferlines.nvim ${{ github.ref_name }}
+          body_path: RELEASE_NOTES.md
+          prerelease: ${{ needs.validate.outputs.prerelease == 'true' }}
