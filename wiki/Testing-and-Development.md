@@ -46,6 +46,21 @@ python3 scripts/test_wiki_sync.py     # wiki publishing safety
 
 See [Documentation Pipeline](Documentation-Pipeline).
 
+## Preview screenshots
+
+Images in `wiki/assets` come from real Neovim sessions, never edited by hand. Each scene in
+`scripts/preview/scene.lua` runs in a private tmux server; `ansi2html.py` frames the pane
+as HTML:
+
+```sh
+NVIM_TEST_DEPS="$HOME/.local/share/nvim/lazy" scripts/preview/render-all.sh /tmp/previews
+```
+
+Screenshot each page's `#shot` element at device scale factor 2 (for example with
+Playwright) and save it in the `wiki/assets` directory, named after the scene. Fonts:
+FiraCode Nerd Font Mono and Symbols Nerd Font Mono. `scripts/test_docs.py` requires every
+capture to be at least 2000 px wide and under 600 KiB.
+
 ## Gotchas
 
 - A plain `nvim +lua ... +qa` can exit zero despite a Lua error. Use an explicit
