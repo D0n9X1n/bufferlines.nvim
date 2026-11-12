@@ -45,6 +45,19 @@ python3 scripts/test_wiki_sync.py     # wiki 发布安全性
 
 参见[文档流水线](Documentation-Pipeline-zh-CN)。
 
+## 预览截图
+
+`wiki/assets` 中的截图均来自真实的 Neovim 会话，不做手工修图。`scripts/preview/scene.lua`
+中的每个场景在独立的 tmux 服务器中运行，`ansi2html.py` 把窗格转成带窗口边框的 HTML：
+
+```sh
+NVIM_TEST_DEPS="$HOME/.local/share/nvim/lazy" scripts/preview/render-all.sh /tmp/previews
+```
+
+以设备缩放比 2（例如用 Playwright）截取每个页面的 `#shot` 元素，以场景名
+保存到 `wiki/assets` 目录。字体：FiraCode Nerd Font Mono 与 Symbols Nerd Font Mono。
+`scripts/test_docs.py` 要求每张截图宽度至少 2000 px，且小于 600 KiB。
+
 ## 易踩的坑
 
 - 即使发生 Lua 错误，`nvim +lua ... +qa` 也可能以 0 退出。请使用显式的 `cquit 1` 失败路径。

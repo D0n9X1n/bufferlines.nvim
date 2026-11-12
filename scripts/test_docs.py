@@ -105,6 +105,9 @@ FEATURE_ASSETS = {
     "Pinning": "pinning.png",
     "Custom areas": "custom-areas.png",
 }
+ASSET_MIN_WIDTH = 2000
+ASSET_MAX_BYTES = 600 * 1024
+ASSETS_MAX_TOTAL = 8 * 1024 * 1024
 UPSTREAM_IMAGE_HOSTS = ("user-images.githubusercontent.com", "akinsho/bufferline.nvim/actions")
 # The wiki publisher mirrors only *.md, so wiki pages load captures from the main branch.
 WIKI_ASSET_URL = "https://raw.githubusercontent.com/D0n9X1n/bufferlines.nvim/main/wiki/assets/"
@@ -616,6 +619,19 @@ def test_every_feature_has_a_capture() -> None:
         part = re.split(r"^#{2,3} ", english, flags=re.M)
         body = next((p for p in part if p.startswith(heading + "\n")), "")
         check(f"({WIKI_ASSET_URL}{asset})" in body, f"Features.md section {heading!r} must show {asset}")
+
+
+def test_captures_are_retina_and_bounded() -> None:
+    """Captures render at 2x (crisp on HiDPI) yet stay small enough for a docs repo."""
+    total = 0
+    for png in sorted((WIKI / "assets").glob("*.png")):
+        data = png.read_bytes()
+        check(data[:8] == b"\x89PNG\r\n\x1a\n", f"{png.name} is not a PNG")
+        width = int.from_bytes(data[16:20], "big")
+        check(width >= ASSET_MIN_WIDTH, f"{png.name} is {width}px wide; render at 2x (>= {ASSET_MIN_WIDTH}px)")
+        check(len(data) <= ASSET_MAX_BYTES, f"{png.name} is {len(data) // 1024} KiB; keep each under {ASSET_MAX_BYTES // 1024} KiB")
+        total += len(data)
+    check(total <= ASSETS_MAX_TOTAL, f"wiki/assets totals {total // 1024} KiB; keep under {ASSETS_MAX_TOTAL // 1024} KiB")
 
 
 def main() -> int:

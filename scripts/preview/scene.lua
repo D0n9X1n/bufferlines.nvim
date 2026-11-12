@@ -6,8 +6,26 @@ vim.opt.rtp:append(vim.env.NVIM_TEST_DEPS .. "/nvim-web-devicons")
 vim.o.termguicolors = true
 vim.o.showmode, vim.o.ruler, vim.o.laststatus, vim.o.shortmess = false, false, 2, "atIF"
 vim.o.mousemoveevent = true
-vim.cmd.colorscheme("habamax")
+vim.o.number, vim.o.cursorline, vim.o.signcolumn, vim.o.fillchars = true, true, "yes", "eob: "
+vim.o.wrap = false
+-- The focused multiline header shows its keys instead of a scratch buffer name.
+function _G.preview_statusline()
+  if vim.bo.filetype == "bufferlines" then return " HEADER  h j k l move  <CR> open  x close  <Esc> back " end
+  return " %f %m%= %{&filetype}  %l:%c "
+end
+vim.o.statusline = "%!v:lua.preview_statusline()"
+-- -u skips filetype detection until after this file, but scenes open buffers right away.
+vim.cmd("filetype plugin on | syntax on")
+vim.o.background = "dark"
+vim.cmd.colorscheme("catppuccin")
 require("nvim-web-devicons").setup({ default = true })
+-- Built-in Lua/Markdown parsers give the code real colours without extra plugins.
+vim.api.nvim_create_autocmd("FileType", {
+  pattern = { "lua", "markdown" },
+  callback = function(ev) pcall(vim.treesitter.start, ev.buf) end,
+})
+-- Show ui.lua at the hover-aware close-icon code rather than the file banner.
+local VIEW = { topline = 274, lnum = 278, col = 2 }
 
 local api = vim.api
 local function path(rel) return root .. "/" .. rel end
@@ -15,6 +33,7 @@ local function edit(rel) vim.cmd.edit(vim.fn.fnameescape(path(rel))) end
 local function sidebar(lines)
   vim.cmd("topleft 30vnew")
   vim.bo.buftype, vim.bo.bufhidden, vim.bo.buflisted, vim.bo.filetype = "nofile", "wipe", false, "preview-tree"
+  vim.wo.number, vim.wo.cursorline, vim.wo.signcolumn = false, false, "no"
   api.nvim_buf_set_lines(0, 0, -1, false, lines)
   vim.cmd("wincmd l")
 end
@@ -64,7 +83,7 @@ local function pinned() return require("bufferlines.groups").builtin.pinned:with
 -- Each scene: options for setup(), files to open, optional setup() after opening, optional action() before capture.
 local SCENES = {
   ["multiline-sidebar"] = {
-    options = { multiline = { enabled = true, max_rows = 3 }, separator_style = "slant" },
+    options = { multiline = { enabled = true, max_rows = 3 } },
     files = vim.list_slice(MANY, 1, 12),
     setup = function() sidebar(TREE) end,
     laststatus = 3,
@@ -134,6 +153,7 @@ local SCENES = {
     options = { offsets = { { filetype = "preview-tree", text = "File Explorer", separator = true } } },
     files = CORE,
     setup = function() sidebar(TREE) end,
+    laststatus = 3,
   },
   numbers = { options = { numbers = "both" }, files = CORE },
   duplicates = {
@@ -215,10 +235,12 @@ if not ok then
 end
 
 vim.defer_fn(function()
-  -- Startup can leave a sidebar focused; capture with the editing window current.
-  if not scene.keep_window then
-    for _, win in ipairs(api.nvim_tabpage_list_wins(0)) do
-      if api.nvim_buf_get_name(api.nvim_win_get_buf(win)) == path("lua/bufferlines/ui.lua") then api.nvim_set_current_win(win) end
+  local ui = path("lua/bufferlines/ui.lua")
+  for _, win in ipairs(api.nvim_tabpage_list_wins(0)) do
+    if api.nvim_buf_get_name(api.nvim_win_get_buf(win)) == ui then
+      api.nvim_win_call(win, function() vim.fn.winrestview(VIEW) end)
+      -- Startup can leave a sidebar focused; capture with the editing window current.
+      if not scene.keep_window then api.nvim_set_current_win(win) end
     end
   end
   if scene.action then
