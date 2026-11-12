@@ -60,69 +60,54 @@ REQUIRED_PAGE_GLYPHS = {
 # only the surrounding prose is translated.
 CODE_PARITY_PAGES = ["Features.md", "Multiline-Buffer-Tabs.md"]
 
-# Every image that must survive any README slimming. Captured from the README
-# before the wiki split so a dropped screenshot fails loudly.
+# README images: our own captures only. The multiline hero leads.
+README_HERO = "wiki/assets/multiline-sidebar.png"
 REQUIRED_README_IMAGES = [
     "https://github.com/D0n9X1n/bufferlines.nvim/actions/workflows/ci.yml/badge.svg",
+    README_HERO,
+    "wiki/assets/multiline-overflow.png",
+    "wiki/assets/multiline-navigate.png",
     "wiki/assets/default.png",
     "wiki/assets/slope.png",
-    "wiki/assets/multiline-sidebar.png",
-    "wiki/assets/pick.png",
+    "wiki/assets/diagnostics.png",
     "wiki/assets/groups.png",
-    "https://user-images.githubusercontent.com/22454918/111992693-9c6a9b00-8b0d-11eb-8c39-19db58583061.gif",
-    "https://user-images.githubusercontent.com/22454918/111992989-fec39b80-8b0d-11eb-851b-010641196a04.png",
-    "https://user-images.githubusercontent.com/22454918/111993296-5bbf5180-8b0e-11eb-9ad9-fcf9619436fd.gif",
-    "https://user-images.githubusercontent.com/22454918/111993343-6da0f480-8b0e-11eb-8d93-44019458d2c9.png",
-    "https://user-images.githubusercontent.com/22454918/111993390-7a254d00-8b0e-11eb-9951-43b4350f6a29.gif",
-    "https://user-images.githubusercontent.com/22454918/111993463-91643a80-8b0e-11eb-87f0-26acfe92c021.gif",
-    "https://user-images.githubusercontent.com/22454918/113215394-b1180300-9272-11eb-9632-8a9f9aae99fa.png",
-    "https://user-images.githubusercontent.com/22454918/117363338-5fd3e280-aeb4-11eb-99f2-5ec33dff6f31.png",
-    "https://user-images.githubusercontent.com/22454918/118527523-4d219f00-b739-11eb-889f-60fb06fd71bc.png",
-    "https://user-images.githubusercontent.com/22454918/119562833-b5f2c200-bd9e-11eb-81d3-06876024bf30.png",
-    "https://user-images.githubusercontent.com/22454918/130784872-936d4c55-b9dd-413b-871d-7bc66caf8f17.png",
-    "https://user-images.githubusercontent.com/22454918/132410772-0a4c0b95-63bb-4281-8a4e-a652458c3f0f.gif",
-    "https://user-images.githubusercontent.com/22454918/157337891-1848da24-69d6-4970-96ee-cf65b2a25c46.png",
-    "https://user-images.githubusercontent.com/22454918/161112867-ba48fdf6-42ee-4cd3-9e1a-7118c4a2738b.png",
-    "https://user-images.githubusercontent.com/22454918/185873089-2ae20db0-f292-4d96-afe4-ef0683a60709.png",
-    "https://user-images.githubusercontent.com/22454918/189106657-163b0550-897c-42c8-a571-d899bdd69998.gif",
-    "https://user-images.githubusercontent.com/22454918/220115787-0ba2264f-1cf5-4f18-a322-7c7cfa3d8f42.png",
-    "https://user-images.githubusercontent.com/4028913/112573484-9ee92100-8da9-11eb-9ffd-da9cb9cae3a6.png",
-    "https://user-images.githubusercontent.com/58056722/119390133-e5d19500-bccc-11eb-915d-f5d11f8e652c.jpeg",
-    "https://user-images.githubusercontent.com/58056722/119390136-e66a2b80-bccc-11eb-9a87-e622e3e20563.jpeg",
+    "wiki/assets/pick.png",
+    "wiki/assets/hover.png",
 ]
+README_MAX_LINES = 120
 
-# Headings the README must keep, matching its own table of contents.
+# Headings the README must keep.
 REQUIRED_README_EN_HEADINGS = [
+    "Multiline buffer tabs",
+    "Installation",
+    "Features",
     "Migrating from bufferline.nvim",
+    "Documentation",
     "Acknowledgements",
     "License",
-    "Requirements",
-    "Installation",
-    "Usage",
-    "Configuration",
-    "Features",
-    "Multiline buffer tabs",
-    "Alternate styling",
-    "Slanted tabs",
-    "Sloped tabs",
-    "Hover events",
-    "Underline indicator",
-    "Tabpages",
-    "LSP indicators",
-    "Groups",
-    "Sidebar offsets",
-    "Numbers",
-    "Unique names",
-    "Close icons",
-    "Re-ordering",
-    "Picking",
-    "Pinning",
-    "Custom areas",
-    "How do I see only buffers per tab?",
-    "Caveats",
-    "FAQ",
-    "Tests",
 ]
+
+# Every Features section shows exactly this fresh capture (one image per feature).
+FEATURE_ASSETS = {
+    "Slanted tabs": "slant.png",
+    "Sloped tabs": "slope.png",
+    "Hover events": "hover.png",
+    "Underline indicator": "underline.png",
+    "Tabpages": "tabpages.png",
+    "LSP indicators": "diagnostics.png",
+    "Groups": "groups.png",
+    "Sidebar offsets": "offsets.png",
+    "Numbers": "numbers.png",
+    "Unique names": "duplicates.png",
+    "Close icons": "close-icons.png",
+    "Re-ordering": "reorder.png",
+    "Picking": "pick.png",
+    "Pinning": "pinning.png",
+    "Custom areas": "custom-areas.png",
+}
+UPSTREAM_IMAGE_HOSTS = ("user-images.githubusercontent.com", "akinsho/bufferline.nvim/actions")
+# The wiki publisher mirrors only *.md, so wiki pages load captures from the main branch.
+WIKI_ASSET_URL = "https://raw.githubusercontent.com/D0n9X1n/bufferlines.nvim/main/wiki/assets/"
 
 # Fork-specific help tags that must never be dropped by a docs refactor.
 REQUIRED_HELP_TAGS = [
@@ -322,6 +307,10 @@ def test_readme_images_and_headings_are_preserved() -> None:
     }
     for heading in REQUIRED_README_EN_HEADINGS:
         check(heading in headings, f"README.md dropped heading: {heading}")
+    lines = read(README_EN).splitlines()
+    check(len(lines) <= README_MAX_LINES, f"README.md is {len(lines)} lines; keep it under {README_MAX_LINES}")
+    first = next((m.group(1) for m in re.finditer(r"!\[[^\]]*\]\(([^)\s]+)\)", read(README_EN))), None)
+    check(first == README_HERO, f"README.md must lead with the multiline hero, found {first}")
 
 
 def test_multiline_preview_and_wiki_quickstart() -> None:
@@ -568,13 +557,17 @@ def test_readme_release_contract() -> None:
             f"{path.name}: acknowledgements",
         )
         check('"D0n9X1n/bufferlines.nvim"' in text and 'version = "*"' in text, f"{path.name}: install snippet")
+        check("Installation-and-Usage" in text and ("migrat" in text.lower() or "迁移" in text),
+              f"{path.name}: links the migration guide")
+    for name in ("Installation-and-Usage.md", f"Installation-and-Usage{ZH_SUFFIX}.md"):
+        text = read(WIKI / name)
         for old, new in (
             ('require("bufferline")', 'require("bufferlines")'),
             (":BufferLinePick", ":BufferLinesPick"),
             ("BufferLineFill", "BufferLinesFill"),
             ("vim.g.BufferlinePositions", "vim.g.BufferlinesPositions"),
         ):
-            check(old in text and new in text, f"{path.name}: migration row {old}")
+            check(old in text and new in text, f"{name}: migration row {old}")
     log = read(ROOT / "CHANGELOG.md")
     head = log.split("## 1.0.0")[0]
     check(log.startswith("# Changelog") and "## 1.0.0" in log and "## [4." not in log and "4.10" not in head,
@@ -595,6 +588,34 @@ def test_publishing_docs_match_publisher() -> None:
             check(claim not in text, f"{name}: false preservation claim '{claim}'")
     check("deleted" in read(WIKI / "Documentation-Pipeline.md"), "Documentation-Pipeline.md: documents mirror deletion")
     check("删除" in read(WIKI / "Documentation-Pipeline-zh-CN.md"), "Documentation-Pipeline-zh-CN.md: documents mirror deletion")
+
+
+def test_only_fresh_screenshots() -> None:
+    """README and wiki use this project's own captures; every referenced asset exists."""
+    for path in [README_EN, README_ZH, *WIKI.glob("*.md")]:
+        text = read(path)
+        for host in UPSTREAM_IMAGE_HOSTS:
+            check(host not in text, f"{path.name}: still uses an upstream image ({host})")
+        for asset in re.findall(r"(?:wiki/assets/|" + re.escape(WIKI_ASSET_URL) + r")([^)\s\"]+)", text):
+            check((WIKI / "assets" / asset).is_file(), f"{path.name}: missing asset {asset}")
+        if path.parent == WIKI:
+            check("](assets/" not in text, f"{path.name}: relative asset paths break on the published wiki")
+
+
+def test_every_feature_has_a_capture() -> None:
+    for name in ("Features.md", f"Features{ZH_SUFFIX}.md"):
+        sections = re.split(r"^#{2,3} ", read(WIKI / name), flags=re.M)
+        found = []
+        for section in sections[1:]:
+            found += re.findall(r"!\[[^\]]*\]\(" + re.escape(WIKI_ASSET_URL) + r"([^)\s]+)\)", section)
+        for heading, asset in FEATURE_ASSETS.items():
+            check(asset in found, f"{name}: feature {heading!r} needs assets/{asset}")
+            check((WIKI / "assets" / asset).is_file(), f"missing capture wiki/assets/{asset}")
+    english = read(WIKI / "Features.md")
+    for heading, asset in FEATURE_ASSETS.items():
+        part = re.split(r"^#{2,3} ", english, flags=re.M)
+        body = next((p for p in part if p.startswith(heading + "\n")), "")
+        check(f"({WIKI_ASSET_URL}{asset})" in body, f"Features.md section {heading!r} must show {asset}")
 
 
 def main() -> int:
