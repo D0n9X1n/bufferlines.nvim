@@ -9,6 +9,7 @@ tmux -S "$sock" -f /dev/null new-session -d -x 140 -y 24 -s prev \
 tmux -S "$sock" set -g default-terminal tmux-256color >/dev/null
 tmux -S "$sock" set -ga terminal-overrides ',*:Tc' >/dev/null
 for _ in $(seq 100); do [ -f "$tmp/ready" ] && break; sleep 0.1; done
+[ -f "$tmp/ready.err" ] && { cat "$tmp/ready.err" >&2; exit 1; }
 [ -f "$tmp/ready" ] || { echo "scene $scene never became ready" >&2; exit 1; }
 sleep 1
 tmux -S "$sock" capture-pane -p -e -J -t prev > "$tmp/pane.ansi"

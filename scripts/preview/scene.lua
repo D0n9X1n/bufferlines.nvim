@@ -1,50 +1,33 @@
--- Preview scenes for README screenshots. Env: PREVIEW_SCENE (default|slope|multiline|pick|groups), PREVIEW_READY.
+-- Preview scenes for README and wiki screenshots.
+-- Env: PREVIEW_SCENE (a key of SCENES), PREVIEW_READY (file written once the frame is final).
 local root = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h:h:h")
 vim.opt.rtp:prepend(root)
 vim.opt.rtp:append(vim.env.NVIM_TEST_DEPS .. "/nvim-web-devicons")
 vim.o.termguicolors = true
 vim.o.showmode, vim.o.ruler, vim.o.laststatus, vim.o.shortmess = false, false, 2, "atIF"
+vim.o.mousemoveevent = true
 vim.cmd.colorscheme("habamax")
 require("nvim-web-devicons").setup({ default = true })
 
-local scene = vim.env.PREVIEW_SCENE or "default"
-local scenes = {
-  default = {},
-  slope = { separator_style = "slope" },
-  multiline = {
-    multiline = { enabled = true, max_rows = 3 },
-    offsets = { { filetype = "preview-tree", text = "Explorer", separator = true } },
-  },
-  pick = {},
-  groups = {
-    groups = {
-      items = {
-        require("bufferlines.groups").builtin.pinned:with({ icon = "󰐃" }),
-        {
-          name = "Lua",
-          highlight = { fg = "#87afd7" },
-          matcher = function(b) return b.name:match("%.lua$") ~= nil end,
-        },
-        {
-          name = "Docs",
-          highlight = { fg = "#d7af87" },
-          matcher = function(b) return b.name:match("%.md$") ~= nil end,
-        },
-      },
-    },
-  },
-}
+local api = vim.api
+local function path(rel) return root .. "/" .. rel end
+local function edit(rel) vim.cmd.edit(vim.fn.fnameescape(path(rel))) end
+local function sidebar(lines)
+  vim.cmd("topleft 30vnew")
+  vim.bo.buftype, vim.bo.bufhidden, vim.bo.buflisted, vim.bo.filetype = "nofile", "wipe", false, "preview-tree"
+  api.nvim_buf_set_lines(0, 0, -1, false, lines)
+  vim.cmd("wincmd l")
+end
+local function diagnose(rel, severities)
+  local list = {}
+  for i, severity in ipairs(severities) do
+    list[#list + 1] = { lnum = i - 1, col = 0, severity = vim.diagnostic.severity[severity], message = "preview" }
+  end
+  vim.diagnostic.set(api.nvim_create_namespace("preview"), vim.fn.bufnr(path(rel)), list)
+end
 local function indicator(count, level) return " " .. (level:match("error") and " " or " ") .. count end
-require("bufferlines").setup({
-  options = vim.tbl_extend(
-    "force",
-    { diagnostics = "nvim_lsp", diagnostics_indicator = indicator, always_show_bufferline = true },
-    scenes[scene]
-  ),
-})
-if scene == "multiline" then vim.o.laststatus = 3 end
 
-local files = {
+local CORE = {
   "lua/bufferlines.lua",
   "lua/bufferlines/ui.lua",
   "README.md",
@@ -52,49 +35,203 @@ local files = {
   "lua/bufferlines/config.lua",
   "doc/bufferlines.txt",
 }
-if scene == "multiline" then
-  vim.list_extend(files, {
-    "lua/bufferlines/groups.lua",
-    "lua/bufferlines/commands.lua",
-    "lua/bufferlines/multiline/layout.lua",
-    "lua/bufferlines/multiline/runtime.lua",
-    "wiki/Multiline-Buffer-Tabs.md",
-    "CHANGELOG.md",
-  })
-end
-for _, f in ipairs(files) do
-  vim.cmd.edit(vim.fn.fnameescape(root .. "/" .. f))
-end
-local ui = vim.fn.bufnr(root .. "/lua/bufferlines/ui.lua")
-vim.diagnostic.set(vim.api.nvim_create_namespace("preview"), ui, {
-  { lnum = 0, col = 0, severity = vim.diagnostic.severity.ERROR, message = "preview" },
-  { lnum = 1, col = 0, severity = vim.diagnostic.severity.WARN, message = "preview" },
+local MANY = vim.list_extend(vim.deepcopy(CORE), {
+  "lua/bufferlines/groups.lua",
+  "lua/bufferlines/commands.lua",
+  "lua/bufferlines/multiline/layout.lua",
+  "lua/bufferlines/multiline/runtime.lua",
+  "wiki/Multiline-Buffer-Tabs.md",
+  "CHANGELOG.md",
+  "lua/bufferlines/palette.lua",
+  "lua/bufferlines/highlights.lua",
+  "lua/bufferlines/offset.lua",
+  "wiki/Features.md",
+  "scripts/gen_help.py",
+  "tests/golden_spec.lua",
 })
-if scene == "groups" then require("bufferlines.groups").toggle_pin() end
-vim.cmd.edit(vim.fn.fnameescape(root .. "/lua/bufferlines/ui.lua"))
+local TREE = {
+  "  bufferlines.nvim",
+  "  ├ lua",
+  "  │ ├ bufferlines",
+  "  │ └ bufferlines.lua",
+  "  ├ doc",
+  "  ├ wiki",
+  "  ├ README.md",
+  "  └ CHANGELOG.md",
+}
+local function pinned() return require("bufferlines.groups").builtin.pinned:with({ icon = "󰐃" }) end
 
-if scene == "multiline" then
-  vim.cmd("topleft 30vnew")
-  vim.bo.buftype, vim.bo.bufhidden, vim.bo.buflisted, vim.bo.filetype = "nofile", "wipe", false, "preview-tree"
-  local tree = {
-    "  bufferlines.nvim",
-    "  ├ lua",
-    "  │ ├ bufferlines",
-    "  │ └ bufferlines.lua",
-    "  ├ doc",
-    "  ├ wiki",
-  }
-  vim.list_extend(tree, { "  ├ README.md", "  └ CHANGELOG.md" })
-  vim.api.nvim_buf_set_lines(0, 0, -1, false, tree)
-  vim.cmd("wincmd l")
+-- Each scene: options for setup(), files to open, optional setup() after opening, optional action() before capture.
+local SCENES = {
+  ["multiline-sidebar"] = {
+    options = { multiline = { enabled = true, max_rows = 3 }, separator_style = "slant" },
+    files = vim.list_slice(MANY, 1, 12),
+    setup = function() sidebar(TREE) end,
+    laststatus = 3,
+  },
+  ["multiline-overflow"] = {
+    options = { multiline = { enabled = true, max_rows = 2 } },
+    files = MANY,
+    laststatus = 3,
+  },
+  ["multiline-navigate"] = {
+    options = { multiline = { enabled = true, max_rows = 3 } },
+    files = vim.list_slice(MANY, 1, 12),
+    laststatus = 3,
+    action = function()
+      local handle = require("bufferlines.multiline.runtime").handles()[api.nvim_get_current_tabpage()]
+      api.nvim_set_current_win(handle.win)
+      api.nvim_feedkeys(api.nvim_replace_termcodes("jl", true, false, true), "mx", false)
+    end,
+  },
+  default = { options = {}, files = CORE },
+  slant = { options = { separator_style = "slant" }, files = CORE },
+  slope = { options = { separator_style = "slope" }, files = CORE },
+  hover = {
+    options = { hover = { enabled = true, delay = 1, reveal = { "close" } } },
+    files = CORE,
+    action = function()
+      local col, target = 0, vim.fn.bufnr(path("README.md"))
+      for _, c in ipairs(require("bufferlines.state").visible_components) do
+        if c.id == target then break end
+        col = col + c.length
+      end
+      api.nvim_exec_autocmds("User", { pattern = "BufferLinesHoverOver", data = { cursor_pos = col + 3 } })
+    end,
+  },
+  underline = { options = { indicator = { style = "underline" } }, files = CORE },
+  tabpages = {
+    options = { mode = "tabs" },
+    files = CORE,
+    setup = function()
+      vim.cmd("tabnew " .. vim.fn.fnameescape(path("README.md")))
+      vim.cmd("vsplit " .. vim.fn.fnameescape(path("wiki/Home.md")))
+      vim.cmd("tabnew " .. vim.fn.fnameescape(path("CHANGELOG.md")))
+      vim.cmd("tabfirst")
+    end,
+    keep_window = true,
+  },
+  diagnostics = {
+    options = { diagnostics = "nvim_lsp", diagnostics_indicator = indicator },
+    files = CORE,
+    setup = function()
+      diagnose("lua/bufferlines/ui.lua", { "ERROR", "ERROR", "WARN" })
+      diagnose("lua/bufferlines/config.lua", { "WARN" })
+    end,
+  },
+  groups = {
+    options = {
+      groups = {
+        items = {
+          { name = "Lua", highlight = { fg = "#87afd7" }, matcher = function(b) return b.name:match("%.lua$") ~= nil end },
+          { name = "Docs", highlight = { fg = "#d7af87" }, matcher = function(b) return b.name:match("%.md$") ~= nil end },
+        },
+      },
+    },
+    files = CORE,
+  },
+  offsets = {
+    options = { offsets = { { filetype = "preview-tree", text = "File Explorer", separator = true } } },
+    files = CORE,
+    setup = function() sidebar(TREE) end,
+  },
+  numbers = { options = { numbers = "both" }, files = CORE },
+  duplicates = {
+    options = {},
+    files = { "README.md" },
+    setup = function()
+      local dir = vim.fn.tempname()
+      for _, sub in ipairs({ "app/components", "app/utils", "app/models" }) do
+        vim.fn.mkdir(dir .. "/" .. sub, "p")
+        vim.fn.writefile({ "return {}" }, dir .. "/" .. sub .. "/init.lua")
+        vim.cmd.edit(vim.fn.fnameescape(dir .. "/" .. sub .. "/init.lua"))
+      end
+    end,
+  },
+  ["close-icons"] = {
+    options = { show_buffer_close_icons = true, show_close_icon = true },
+    files = CORE,
+    setup = function()
+      vim.cmd("buffer " .. vim.fn.bufnr(path("README.md")))
+      api.nvim_buf_set_lines(0, 0, 0, false, { "" })
+      vim.cmd("buffer " .. vim.fn.bufnr(path("lua/bufferlines/ui.lua")))
+    end,
+    keep_window = true,
+  },
+  reorder = {
+    options = { persist_buffer_sort = false },
+    files = CORE,
+    action = function()
+      for _ = 1, 3 do
+        vim.cmd("BufferLinesMoveNext")
+      end
+    end,
+  },
+  pick = { options = {}, files = CORE, pick = true },
+  pinning = {
+    options = { groups = { items = { pinned() } } },
+    files = CORE,
+    setup = function()
+      for _, rel in ipairs({ "README.md", "lua/bufferlines/config.lua" }) do
+        vim.cmd("buffer " .. vim.fn.bufnr(path(rel)))
+        _G.nvim_bufferlines()
+        require("bufferlines.groups").toggle_pin()
+      end
+    end,
+  },
+  ["custom-areas"] = {
+    options = {
+      custom_areas = {
+        left = function() return { { text = "  bufferlines ", fg = "#1c1c1c", bg = "#87afd7", bold = true } } end,
+        right = function()
+          return {
+            { text = "  2 ", fg = "#d75f5f" },
+            { text = "  1 ", fg = "#d7af5f" },
+            { text = "  main ", fg = "#87af87" },
+          }
+        end,
+      },
+    },
+    files = CORE,
+  },
+}
+
+local name = vim.env.PREVIEW_SCENE or "default"
+local scene = assert(SCENES[name], "unknown scene " .. name)
+local ready = vim.env.PREVIEW_READY
+local ok, err = pcall(function()
+  if scene.laststatus then vim.o.laststatus = scene.laststatus end
+  require("bufferlines").setup({ options = vim.tbl_extend("force", { always_show_bufferline = true }, scene.options) })
+  for _, f in ipairs(scene.files) do
+    edit(f)
+  end
+  edit("lua/bufferlines/ui.lua")
+  if scene.setup then scene.setup() end
+  if not scene.keep_window then edit("lua/bufferlines/ui.lua") end
+end)
+if not ok then
+  vim.fn.writefile({ "setup failed: " .. tostring(err) }, ready .. ".err")
+  return
 end
 
 vim.defer_fn(function()
-  vim.cmd("redraw!")
-  if scene == "pick" then
-    vim.defer_fn(function() vim.fn.writefile({}, vim.env.PREVIEW_READY) end, 400)
-    vim.cmd("BufferLinesPick")
-  else
-    vim.fn.writefile({}, vim.env.PREVIEW_READY)
+  -- Startup can leave a sidebar focused; capture with the editing window current.
+  if not scene.keep_window then
+    for _, win in ipairs(api.nvim_tabpage_list_wins(0)) do
+      if api.nvim_buf_get_name(api.nvim_win_get_buf(win)) == path("lua/bufferlines/ui.lua") then api.nvim_set_current_win(win) end
+    end
   end
-end, 800)
+  if scene.action then
+    local aok, aerr = pcall(scene.action)
+    if not aok then vim.fn.writefile({ "action failed: " .. tostring(aerr) }, ready .. ".err") end
+  end
+  vim.defer_fn(function()
+    vim.cmd("redraw!")
+    if scene.pick then
+      vim.defer_fn(function() vim.fn.writefile({}, ready) end, 400)
+      vim.cmd("BufferLinesPick")
+    else
+      vim.fn.writefile({}, ready)
+    end
+  end, 400)
+end, 600)

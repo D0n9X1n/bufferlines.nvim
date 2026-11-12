@@ -15,7 +15,7 @@
 版本以 `vX.Y.Z` 打标签；`version = "*"` 跟随最新稳定版。多行渲染器包含在每个版本中（可选启用，
 需要 Neovim 0.12+），参见[多行 buffer 标签](Multiline-Buffer-Tabs-zh-CN)。请勿与
 `akinsho/bufferline.nvim` 同时安装，二者都会接管 tabline。请替换原有声明，并参阅
-[从 bufferline.nvim 迁移](https://github.com/D0n9X1n/bufferlines.nvim/blob/main/README.zh-CN.md#从-bufferlinenvim-迁移)。
+[从 bufferline.nvim 迁移](#从-bufferlinenvim-迁移)。
 
 **Lua**
 
@@ -58,3 +58,19 @@ EOF
 可以点击关闭图标来关闭 buffer，也可以在标签的任意位置_右键点击_。
 
 完整使用参考：`:help bufferlines-usage`。
+
+## 从 bufferline.nvim 迁移
+
+所有公开名称都加上 `s`，大小写不变。颜色与布局完全一致。
+
+| 之前（bufferline.nvim） | 之后（bufferlines.nvim） |
+| --- | --- |
+| `require("bufferline")` | `require("bufferlines")` |
+| `:BufferLinePick` 及全部 18 个 `:BufferLine*` 命令 | `:BufferLinesPick`、`:BufferLines*` |
+| `BufferLineFill` 及所有 `BufferLine*` 高亮组 | `BufferLinesFill`、`BufferLines*` |
+| filetype `bufferline`（多行标题栏） | filetype `bufferlines` |
+| `vim.g.BufferlinePositions`、`vim.g.BufferlinePinnedBuffers` | `vim.g.BufferlinesPositions`、`vim.g.BufferlinesPinnedBuffers`（旧值会自动读取一次） |
+| `:h bufferline` | `:h bufferlines` |
+| `show_buffer_default_icon`、`pick_buffer`、`go_to_buffer`、`sort_buffers_by`、`close_buffer_with_pick` | 已移除（自 v4.0.0 起弃用） |
+
+不提供 `require("bufferline")` 兼容层，因此两个插件不能同时安装——请替换原有插件声明。
