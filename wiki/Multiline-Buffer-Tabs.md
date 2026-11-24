@@ -95,6 +95,8 @@ custom areas and disable `hover.enabled` before enabling multiline.
   editor) use those windows' own `fillchars`, which the plugin does not change. With `ambiwidth=double`, another `laststatus`, or a
   `setcellwidths()` entry that widens `▔`, the header keeps your global divider. The
   header follows later `laststatus`, `fillchars` and `ambiwidth` changes in every tab.
+  While you type an Ex command in the focused header it shows the global divider, so
+  `:set fillchars+=…` there never copies the header's glyphs into your global value.
   While the divider is shown, `:set ambiwidth=double` fails with `E835` because `▔` has
   ambiguous width: disable multiline, change the option, then enable it again.
 - Full-height sidebars remain outside the header area. Wrapping uses the header window's

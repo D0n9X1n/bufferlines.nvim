@@ -1780,6 +1780,23 @@ describe("Multiline runtime", function()
     settle(function() return local_fcs() == "vert:Y,horiz:▔,vertright:Y,verthoriz:Y" end)
   end)
 
+  it("keeps the header divider out of the global value when :set runs from the header", function()
+    start_child()
+    child_lua([=[
+      vim.cmd("set laststatus=3 fillchars=vert:X")
+      vim.cmd("split")
+      runtime.flush("test")
+      vim.api.nvim_set_current_win(runtime.handles()[tab].win)
+      function local_fcs()
+        return vim.api.nvim_get_option_value("fillchars", { scope = "local", win = runtime.handles()[tab].win })
+      end
+    ]=])
+    assert.equals("vert:X,horiz:▔,vertright:X,verthoriz:X", child_lua("return local_fcs()"))
+    input(":set fillchars+=eob:@<CR>")
+    assert.equals("vert:X,eob:@", child_lua("return vim.go.fillchars"))
+    settle(function() return child_lua("return local_fcs()") == "vert:X,eob:@,horiz:▔,vertright:X,verthoriz:X" end)
+  end)
+
   it("keeps the global divider when allocated under ambiwidth=double", function()
     vim.o.laststatus = 3
     vim.go.fillchars = "vert:X,eob:@"

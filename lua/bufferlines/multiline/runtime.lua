@@ -6,6 +6,7 @@ local handles = {}
 local options, hooks, saved
 local mode = "disabled"
 local generation, pending, guard, group, loading, warned = 0, nil, false, nil, false, false
+local decorate -- defined with the header window helpers below
 
 -- Temporary unavailability must not change the configured renderer.
 ---@return boolean configured renderer is multiline
@@ -400,6 +401,20 @@ function M.enable(config, callbacks)
       M.request(event.event)
     end,
   })
+  -- :set typed in the focused header starts from its local 'fillchars'; show the global divider
+  -- while the command line is open so the header's glyphs never reach the global value.
+  api.nvim_create_autocmd({ "CmdlineEnter", "CmdlineLeave" }, {
+    group = group,
+    callback = function(event)
+      local handle = handles[api.nvim_get_current_tabpage()]
+      if not handle or not M.owns(handle.win) or api.nvim_get_current_win() ~= handle.win then return end
+      if event.event == "CmdlineEnter" then
+        pcall(decorate, handle)
+      else
+        M.request("CmdlineLeave")
+      end
+    end,
+  })
   -- The header divider depends on these; changing them resizes nothing, so ask for a refresh.
   api.nvim_create_autocmd("OptionSet", {
     group = group,
@@ -474,9 +489,10 @@ end
 -- that cell, so the gap under the last row matches the one above the first, and a left sidebar's
 -- separator continues into it with the global vert character. The glyphs have ambiguous width, so
 -- under ambiwidth=double (or any other layout) the header keeps the global divider.
-local function decorate(handle)
+function decorate(handle)
   local global, candidates = vim.go.fillchars, { "" }
-  if vim.go.laststatus == 3 and vim.go.ambiwidth == "single" then
+  local typing = handle.win == api.nvim_get_current_win() and vim.fn.getcmdtype() ~= ""
+  if not typing and vim.go.laststatus == 3 and vim.go.ambiwidth == "single" then
     -- The junction repeats the raw text of the last vert item (escapes and combining marks kept):
     -- it runs to the next ",key:" or the end, minus a trailing separator unless it is the glyph.
     local vert, items, start = "│", "," .. global, nil
