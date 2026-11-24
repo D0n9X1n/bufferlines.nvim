@@ -1820,14 +1820,65 @@ describe("Multiline runtime", function()
     -- :split in the header copies its window options; the copy shows the header buffer and must
     -- not keep the divider, or ambiwidth=double would still be refused after the header gives it up.
     settle(function() return child_lua("return local_fcs()") == "vert:X,horiz:▔,vertright:X,verthoriz:X" end)
+    child_lua("vim.api.nvim_set_option_value('fillchars', 'horiz:Z', { scope = 'local', win = editor })")
     input(":split<CR>")
     local copy = child_lua("return vim.api.nvim_get_current_win()")
     assert.is_false(child_lua("return runtime.owns(...)", { copy }))
     settle(function() return child_lua("return local_fcs(...)", { copy }) == "" end)
+    -- A window showing a user buffer keeps its own local value.
+    assert.equals("horiz:Z", child_lua("return local_fcs(editor)"))
     child_lua("vim.cmd('set laststatus=2')")
     settle(function() return child_lua("return local_fcs()") == "" end)
     assert.equals("double", child_lua("vim.cmd('set ambiwidth=double'); return vim.go.ambiwidth"))
     assert.equals("vert:X", child_lua("return vim.go.fillchars"))
+  end)
+
+  it("keeps refreshing when clearing one split copy closes another", function()
+    start_child()
+    child_lua([=[
+      vim.cmd("set laststatus=3 fillchars=vert:X")
+      runtime.flush("test")
+      local header = runtime.handles()[tab].win
+      vim.api.nvim_set_current_win(header)
+      vim.cmd("split")
+      vim.api.nvim_set_current_win(header)
+      vim.cmd("split")
+      local copies = {}
+      for _, win in ipairs(vim.api.nvim_list_wins()) do
+        if win ~= header and vim.api.nvim_win_get_buf(win) == vim.api.nvim_win_get_buf(header) then
+          copies[#copies + 1] = win
+        end
+      end
+      -- Clearing the first copy runs a user handler that closes the second one.
+      vim.api.nvim_create_autocmd("OptionSet", { pattern = "fillchars", once = true, callback = function()
+        pcall(vim.api.nvim_win_close, copies[2], true)
+      end })
+      vim.api.nvim_set_current_win(editor)
+    ]=])
+    sync_child()
+    child_lua("vim.cmd('set laststatus=2')")
+    settle(function()
+      local h = child_lua("return runtime.handles()[tab].win")
+      return child_lua("return vim.api.nvim_get_option_value('fillchars', { scope = 'local', win = ... })", { h }) == ""
+    end)
+  end)
+
+  it("joins a sidebar with Neovim's fallback vert when the global value has none", function()
+    vim.o.laststatus = 3
+    vim.go.fillchars = ""
+    -- A widened "│" makes Neovim draw vertical separators with "|".
+    vim.fn.setcellwidths({ { 0x2502, 0x2502, 2 } })
+    local ok, err = pcall(function()
+      runtime.enable(options, hooks)
+      runtime.flush("test")
+      local handle = runtime.handles()[api.nvim_get_current_tabpage()]
+      assert.equals(
+        "horiz:▔,vertright:|,verthoriz:|",
+        api.nvim_get_option_value("fillchars", { scope = "local", win = handle.win })
+      )
+    end)
+    vim.fn.setcellwidths({})
+    assert(ok, err)
   end)
 
   it("keeps the global divider when allocated under ambiwidth=double", function()

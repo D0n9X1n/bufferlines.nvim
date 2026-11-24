@@ -286,9 +286,10 @@ local function recover(reason)
 end
 
 -- :split in the header shows its buffer in a second window with a copy of the header's options.
+-- Each write can run a user OptionSet handler that closes a later window in the list.
 local function sweep()
   for _, win in ipairs(api.nvim_list_wins()) do
-    if not M.owns(win) and vim.b[api.nvim_win_get_buf(win)][marker] == namespace then
+    if api.nvim_win_is_valid(win) and not M.owns(win) and vim.b[api.nvim_win_get_buf(win)][marker] == namespace then
       local scope = { scope = "local", win = win }
       if api.nvim_get_option_value("fillchars", scope) ~= "" then
         pcall(api.nvim_set_option_value, "fillchars", "", scope)
@@ -491,19 +492,24 @@ local function decorate(handle)
   if vim.go.laststatus == 3 and vim.go.ambiwidth == "single" then
     -- The junction repeats the raw text of the last vert item (escapes and combining marks kept):
     -- it runs to the next ",key:" or the end, minus a trailing separator unless it is the glyph.
-    local vert, items, start = "│", "," .. global, nil
+    -- Without a vert item Neovim draws "│", or "|" when setcellwidths() widens it.
+    local verts, items, start = { "│", "|" }, "," .. global, nil
     for pos in items:gmatch(",vert:()") do
       start = pos
     end
     if start then
       local stop = items:find(",%a+:", start + 1)
-      vert = items:sub(start, (stop or #items + 1) - 1)
-      if #vert > 1 then vert = vert:gsub(",$", "") end
+      local vert = items:sub(start, (stop or #items + 1) - 1)
+      verts = { #vert > 1 and vert:gsub(",$", "") or vert }
     end
-    local divider = "horiz:▔,vertright:" .. vert .. ",verthoriz:" .. vert
     -- Append to the user's items verbatim; Neovim validates. The second form follows a trailing
     -- separator, and "" keeps the global divider when a glyph is rejected (e.g. setcellwidths()).
-    candidates = { global == "" and divider or global .. "," .. divider, global .. divider, "" }
+    candidates = {}
+    for _, vert in ipairs(verts) do
+      local divider = "horiz:▔,vertright:" .. vert .. ",verthoriz:" .. vert
+      vim.list_extend(candidates, { global == "" and divider or global .. "," .. divider, global .. divider })
+    end
+    candidates[#candidates + 1] = ""
   end
   -- Compare with the actual local value each time: a user :set may clear it, and a rejected glyph
   -- may become valid later. Rejected candidates write nothing, so an unchanged header costs no write.
