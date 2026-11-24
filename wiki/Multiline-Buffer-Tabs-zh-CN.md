@@ -87,7 +87,8 @@ bufferlines.setup(single_row)
   `fillchars`，插件不会修改它们。在 `ambiwidth=double`、其他 `laststatus` 取值，或
   `setcellwidths()` 加宽了 `▔` 时，header 保留你的全局分隔线。header 会在所有标签页中跟随
   之后对 `laststatus`、`fillchars` 与 `ambiwidth` 的修改。在 header 为当前窗口时执行的
-  `:set fillchars…` 不会把 header 的字符留在你的全局值中。显示该分隔线期间，由于 `▔` 是宽度不明确的字符，`:set ambiwidth=double` 会报
+  `:set fillchars…` 不会把 header 的字符留在你的全局值中，除非它本身修改 `horiz`、`vertright`
+  或 `verthoriz`；修改这些项时请使用 `:setglobal` 或在编辑窗口中执行。显示该分隔线期间，由于 `▔` 是宽度不明确的字符，`:set ambiwidth=double` 会报
   `E835` 失败：请先停用多行模式，修改该选项，然后重新启用。
 - 全高侧边栏位于 header 区域之外。换行按 header 窗口的实际宽度计算；原生的侧边栏偏移不会在
   此重复。打开或调整侧边栏不会改变已有的窗口 ID。

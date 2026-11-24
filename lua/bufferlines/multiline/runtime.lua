@@ -423,7 +423,8 @@ function M.enable(config, callbacks)
     callback = function(event)
       -- :set run while the header is current (typed, command-line window, <Cmd> map, script)
       -- starts from the header's local value; take the divider it appended out of the global one.
-      if event.match == "fillchars" and M.owns(api.nvim_get_current_win()) then
+      -- Only :set reads that base; :setglobal and :setlocal never copy the header's value.
+      if event.match == "fillchars" and vim.v.option_command == "set" and M.owns(api.nvim_get_current_win()) then
         local global, divider = vim.go.fillchars, divider_for(vim.v.option_oldglobal or "")
         for _, cut in ipairs({ "," .. divider, divider .. ",", divider }) do
           local from = global:find(cut, 1, true)

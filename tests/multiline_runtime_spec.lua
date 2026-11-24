@@ -1809,6 +1809,9 @@ describe("Multiline runtime", function()
     child_lua("vim.go.fillchars = 'eob:@,'; runtime.flush('test')")
     input(":set fillchars+=fold:-<CR>")
     assert.equals("eob:@,fold:-", child_lua("return vim.go.fillchars"))
+    -- :setglobal never starts from the header's local value, so it is left exactly as typed.
+    input(":setglobal fillchars=horiz:▔,vertright:│,verthoriz:│<CR>")
+    assert.equals("horiz:▔,vertright:│,verthoriz:│", child_lua("return vim.go.fillchars"))
   end)
 
   it("keeps the global divider when allocated under ambiwidth=double", function()
