@@ -6,7 +6,6 @@ local handles = {}
 local options, hooks, saved
 local mode = "disabled"
 local generation, pending, guard, group, loading, warned = 0, nil, false, nil, false, false
-local decorate -- defined with the header window helpers below
 
 -- Temporary unavailability must not change the configured renderer.
 ---@return boolean configured renderer is multiline
@@ -286,6 +285,22 @@ local function recover(reason)
   end)
 end
 
+-- The items the header appends to the user's 'fillchars'. The junction repeats the raw text of the
+-- last vert item (escapes and combining marks kept): it runs to the next ",key:" or the end, minus
+-- a trailing separator unless it is the glyph itself.
+local function divider_for(global)
+  local vert, items, start = "│", "," .. global, nil
+  for pos in items:gmatch(",vert:()") do
+    start = pos
+  end
+  if start then
+    local stop = items:find(",%a+:", start + 1)
+    vert = items:sub(start, (stop or #items + 1) - 1)
+    if #vert > 1 then vert = vert:gsub(",$", "") end
+  end
+  return "horiz:▔,vertright:" .. vert .. ",verthoriz:" .. vert
+end
+
 ---Restore native visibility and dispose owned headers.
 function M.disable()
   if group then api.nvim_del_augroup_by_id(group) end
@@ -401,25 +416,23 @@ function M.enable(config, callbacks)
       M.request(event.event)
     end,
   })
-  -- :set typed in the focused header starts from its local 'fillchars'; show the global divider
-  -- while the command line is open so the header's glyphs never reach the global value.
-  api.nvim_create_autocmd({ "CmdlineEnter", "CmdlineLeave" }, {
-    group = group,
-    callback = function(event)
-      local handle = handles[api.nvim_get_current_tabpage()]
-      if not handle or not M.owns(handle.win) or api.nvim_get_current_win() ~= handle.win then return end
-      if event.event == "CmdlineEnter" then
-        pcall(decorate, handle)
-      else
-        M.request("CmdlineLeave")
-      end
-    end,
-  })
   -- The header divider depends on these; changing them resizes nothing, so ask for a refresh.
   api.nvim_create_autocmd("OptionSet", {
     group = group,
     pattern = { "laststatus", "fillchars", "ambiwidth" },
-    callback = function() M.request("OptionSet") end,
+    callback = function(event)
+      -- :set run while the header is current (typed, command-line window, <Cmd> map, script)
+      -- starts from the header's local value; take the divider it appended out of the global one.
+      if event.match == "fillchars" and M.owns(api.nvim_get_current_win()) then
+        local global, divider = vim.go.fillchars, divider_for(vim.v.option_oldglobal or "")
+        for _, cut in ipairs({ "," .. divider, divider .. ",", divider }) do
+          local from = global:find(cut, 1, true)
+          local value = from and global:sub(1, from - 1) .. global:sub(from + #cut)
+          if value and pcall(api.nvim_set_option_value, "fillchars", value, { scope = "global" }) then break end
+        end
+      end
+      M.request("OptionSet")
+    end,
   })
   api.nvim_create_autocmd("WinEnter", {
     group = group,
@@ -489,22 +502,10 @@ end
 -- that cell, so the gap under the last row matches the one above the first, and a left sidebar's
 -- separator continues into it with the global vert character. The glyphs have ambiguous width, so
 -- under ambiwidth=double (or any other layout) the header keeps the global divider.
-function decorate(handle)
+local function decorate(handle)
   local global, candidates = vim.go.fillchars, { "" }
-  local typing = handle.win == api.nvim_get_current_win() and vim.fn.getcmdtype() ~= ""
-  if not typing and vim.go.laststatus == 3 and vim.go.ambiwidth == "single" then
-    -- The junction repeats the raw text of the last vert item (escapes and combining marks kept):
-    -- it runs to the next ",key:" or the end, minus a trailing separator unless it is the glyph.
-    local vert, items, start = "│", "," .. global, nil
-    for pos in items:gmatch(",vert:()") do
-      start = pos
-    end
-    if start then
-      local stop = items:find(",%a+:", start + 1)
-      vert = items:sub(start, (stop or #items + 1) - 1)
-      if #vert > 1 then vert = vert:gsub(",$", "") end
-    end
-    local divider = "horiz:▔,vertright:" .. vert .. ",verthoriz:" .. vert
+  if vim.go.laststatus == 3 and vim.go.ambiwidth == "single" then
+    local divider = divider_for(global)
     -- Append to the user's items verbatim; Neovim validates. The second form follows a trailing
     -- separator, and "" keeps the global divider when a glyph is rejected (e.g. setcellwidths()).
     candidates = { global == "" and divider or global .. "," .. divider, global .. divider, "" }

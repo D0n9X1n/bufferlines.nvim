@@ -86,9 +86,8 @@ bufferlines.setup(single_row)
   由 header 下方窗口绘制的交接点（右侧侧边栏或编辑区的竖直分割）使用这些窗口自己的
   `fillchars`，插件不会修改它们。在 `ambiwidth=double`、其他 `laststatus` 取值，或
   `setcellwidths()` 加宽了 `▔` 时，header 保留你的全局分隔线。header 会在所有标签页中跟随
-  之后对 `laststatus`、`fillchars` 与 `ambiwidth` 的修改。在获得焦点的 header 中输入 Ex 命令
-  时，它会显示全局分隔线，因此在那里执行 `:set fillchars+=…` 不会把 header 的字符复制到你的
-  全局值中。显示该分隔线期间，由于 `▔` 是宽度不明确的字符，`:set ambiwidth=double` 会报
+  之后对 `laststatus`、`fillchars` 与 `ambiwidth` 的修改。在 header 为当前窗口时执行的
+  `:set fillchars…` 不会把 header 的字符留在你的全局值中。显示该分隔线期间，由于 `▔` 是宽度不明确的字符，`:set ambiwidth=double` 会报
   `E835` 失败：请先停用多行模式，修改该选项，然后重新启用。
 - 全高侧边栏位于 header 区域之外。换行按 header 窗口的实际宽度计算；原生的侧边栏偏移不会在
   此重复。打开或调整侧边栏不会改变已有的窗口 ID。

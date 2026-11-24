@@ -1795,6 +1795,20 @@ describe("Multiline runtime", function()
     input(":set fillchars+=eob:@<CR>")
     assert.equals("vert:X,eob:@", child_lua("return vim.go.fillchars"))
     settle(function() return child_lua("return local_fcs()") == "vert:X,eob:@,horiz:▔,vertright:X,verthoriz:X" end)
+    -- Every path that runs :set while the header is current: the command-line window, a <Cmd>
+    -- mapping, and prepending or removing items.
+    input(":set fillchars+=fold:-<C-f><CR>")
+    assert.equals("vert:X,eob:@,fold:-", child_lua("return vim.go.fillchars"))
+    child_lua("vim.keymap.set('n', '<F2>', '<Cmd>set fillchars^=diff:x<CR>')")
+    settle(function() return child_lua("return vim.api.nvim_get_current_win() == runtime.handles()[tab].win") end)
+    input("<F2>")
+    assert.equals("diff:x,vert:X,eob:@,fold:-", child_lua("return vim.go.fillchars"))
+    input(":set fillchars-=eob:@<CR>")
+    assert.equals("diff:x,vert:X,fold:-", child_lua("return vim.go.fillchars"))
+    -- A trailing separator in the global value is kept valid.
+    child_lua("vim.go.fillchars = 'eob:@,'; runtime.flush('test')")
+    input(":set fillchars+=fold:-<CR>")
+    assert.equals("eob:@,fold:-", child_lua("return vim.go.fillchars"))
   end)
 
   it("keeps the global divider when allocated under ambiwidth=double", function()
