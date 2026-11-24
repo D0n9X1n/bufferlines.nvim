@@ -229,10 +229,11 @@ header (a right sidebar or a vertical split of the editor) use those windows'
 own 'fillchars', which the plugin does not change. With 'ambiwidth' double, another 'laststatus', or a |setcellwidths()|
 entry that widens "▔", the header keeps your global divider. The header follows
 later 'laststatus', 'fillchars' and 'ambiwidth' changes in every tab. A
-`:set fillchars…` that runs while the header is the current window does not
-leave the header's glyphs in your global value, unless it changes "horiz",
-"vertright" or "verthoriz" itself; use `:setglobal` or an editor window for
-those. While the divider is shown, `:set ambiwidth=double` fails with E835
+`:set fillchars` that adds, prepends or removes items while the header (or a
+split copied from it) is the current window applies to your global value,
+without the header's glyphs. Removing one of the header's own items leaves your
+value unchanged. Use `:setglobal` or an editor window for other assignments to
+"horiz", "vertright" or "verthoriz". While the divider is shown, `:set ambiwidth=double` fails with E835
 because "▔" has ambiguous width: disable multiline, change the option, then
 enable it again.
 

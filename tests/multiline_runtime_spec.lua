@@ -1739,6 +1739,16 @@ describe("Multiline runtime", function()
         runtime.flush("BufEnter")
       end
       assert.equals(0, writes)
+      -- Neither is a header whose divider is already in place.
+      runtime.disable()
+      vim.fn.setcellwidths({})
+      runtime.enable(options, hooks)
+      runtime.flush("test")
+      writes = 0
+      for _ = 1, 4 do
+        runtime.flush("BufEnter")
+      end
+      assert.equals(0, writes)
       -- An undecorated header (laststatus=2) is never written either, not even with "".
       runtime.disable()
       vim.o.laststatus = 2
@@ -1809,9 +1819,63 @@ describe("Multiline runtime", function()
     child_lua("vim.go.fillchars = 'eob:@,'; runtime.flush('test')")
     input(":set fillchars+=fold:-<CR>")
     assert.equals("eob:@,fold:-", child_lua("return vim.go.fillchars"))
-    -- :setglobal never starts from the header's local value, so it is left exactly as typed.
+    -- :setglobal and :setlocal never start from the header's local value: left exactly as typed.
     input(":setglobal fillchars=horiz:▔,vertright:│,verthoriz:│<CR>")
     assert.equals("horiz:▔,vertright:│,verthoriz:│", child_lua("return vim.go.fillchars"))
+    child_lua("vim.go.fillchars = 'vert:X'; runtime.flush('test')")
+    input(":setlocal fillchars=horiz:▔,vertright:│,verthoriz:│<CR>")
+    assert.equals("vert:X", child_lua("return vim.go.fillchars"))
+    -- A :setglobal just before :set: the change applies to what was typed, not the earlier divider.
+    child_lua("runtime.flush('test')")
+    input(":setglobal fillchars=vert:Y | set fillchars+=eob:@<CR>")
+    assert.equals("vert:Y,eob:@", child_lua("return vim.go.fillchars"))
+    input(":setglobal fillchars=vert:Z,eob:@ | set fillchars-=eob:@<CR>")
+    assert.equals("vert:Z", child_lua("return vim.go.fillchars"))
+    -- The user's own copy of the divider items is never taken for the header's.
+    child_lua("vim.go.fillchars = 'horiz:▔,vert:X'; runtime.flush('test')")
+    input(":set fillchars+=eob:@<CR>")
+    assert.equals("horiz:▔,vert:X,eob:@", child_lua("return vim.go.fillchars"))
+    child_lua("vim.cmd('set laststatus=2'); vim.go.fillchars = 'horiz:▔,vertright:│,verthoriz:│'; runtime.flush('test')")
+    assert.equals("", child_lua("return local_fcs()"))
+    input(":set fillchars+=eob:@<CR>")
+    assert.equals("horiz:▔,vertright:│,verthoriz:│,eob:@", child_lua("return vim.go.fillchars"))
+    -- Removing one of the header's own items leaves the user's value alone.
+    child_lua("vim.cmd('set laststatus=3'); vim.go.fillchars = 'vert:X'; runtime.flush('test')")
+    input(":set fillchars-=vertright:X<CR>")
+    assert.equals("vert:X", child_lua("return vim.go.fillchars"))
+    -- A plain assignment that only resembles a removal is kept as typed.
+    child_lua("runtime.flush('test')")
+    input(":set fillchars=vert:X,fold:-<CR>")
+    assert.equals("vert:X,fold:-", child_lua("return vim.go.fillchars"))
+  end)
+
+  it("repairs a :set without OptionSet and clears the header's options from split copies", function()
+    start_child()
+    child_lua([=[
+      vim.cmd("set laststatus=3 fillchars=vert:X")
+      vim.cmd("split")
+      runtime.flush("test")
+      function divided()
+        local found = {}
+        for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+          if vim.api.nvim_get_option_value("fillchars", { scope = "local", win = win }):find("▔") then
+            found[#found + 1] = win
+          end
+        end
+        return found
+      end
+    ]=])
+    -- A non-nested autocmd fires no OptionSet; the next refresh still repairs the global value.
+    child_lua("vim.cmd([[autocmd WinEnter * ++once set fillchars+=eob:@]])")
+    child_lua("vim.api.nvim_set_current_win(runtime.handles()[tab].win)")
+    settle(function() return child_lua("return vim.go.fillchars") == "vert:X,eob:@" end)
+    settle(function() return #child_lua("return divided()") == 1 end)
+    -- :split in the header copies its window options; the copy must not keep the divider.
+    input(":split<CR>")
+    child_lua("vim.cmd('set laststatus=2')")
+    settle(function() return #child_lua("return divided()") == 0 end)
+    assert.equals("double", child_lua("vim.cmd('set ambiwidth=double'); return vim.go.ambiwidth"))
+    assert.equals("vert:X,eob:@", child_lua("return vim.go.fillchars"))
   end)
 
   it("keeps the global divider when allocated under ambiwidth=double", function()

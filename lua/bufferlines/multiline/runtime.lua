@@ -6,6 +6,9 @@ local handles = {}
 local options, hooks, saved
 local mode = "disabled"
 local generation, pending, guard, group, loading, warned = 0, nil, false, nil, false, false
+-- Every 'fillchars' value a header was given, mapped to the global value it was built from.
+local written = {}
+local decorate
 
 -- Temporary unavailability must not change the configured renderer.
 ---@return boolean configured renderer is multiline
@@ -301,11 +304,55 @@ local function divider_for(global)
   return "horiz:▔,vertright:" .. vert .. ",verthoriz:" .. vert
 end
 
+-- :set from a window holding a header value starts from that value, so Neovim's new global copies
+-- the header's items. Replay the change on the global value it was built from: an append, a prepend,
+-- or a removal (one cut from the user's items, or from the header's, which leaves the base). Any
+-- other result is kept as Neovim computed it.
+local function rebase(old, base, oldglobal, new)
+  if new == old or new == base then return nil end
+  local tail = old:sub(#base + 1)
+  local function join(a, b)
+    if a == "" or b == "" then return a .. b end
+    return a:sub(-1) == "," and a .. b or a .. "," .. b
+  end
+  if new:sub(1, #old) == old then return join(oldglobal, (new:sub(#old + 1):gsub("^,", ""))) end
+  if #new > #old and new:sub(-#old) == old then return join((new:sub(1, -#old - 1):gsub(",$", "")), oldglobal) end
+  if oldglobal ~= base then return nil end
+  if #new < #old then
+    local head, back = 0, 0
+    while head < #new and new:byte(head + 1) == old:byte(head + 1) do
+      head = head + 1
+    end
+    while back < #new - head and new:byte(#new - back) == old:byte(#old - back) do
+      back = back + 1
+    end
+    if head >= #base and head + back == #new then return base end
+  end
+  if new == (tail:gsub("^,", "")) then return "" end
+  if #new > #tail and new:sub(-#tail) == tail then return new:sub(1, -#tail - 1) end
+  return nil
+end
+
+-- :split from the header copies its window options; only values this module wrote are cleared.
+local function sweep()
+  if next(written) == nil then return end
+  for _, win in ipairs(api.nvim_list_wins()) do
+    if not M.owns(win) then
+      local scope = { scope = "local", win = win }
+      if written[api.nvim_get_option_value("fillchars", scope)] then
+        pcall(api.nvim_set_option_value, "fillchars", "", scope)
+      end
+    end
+  end
+end
+
 ---Restore native visibility and dispose owned headers.
 function M.disable()
   if group then api.nvim_del_augroup_by_id(group) end
   group = nil
   vim.on_key(nil, namespace)
+  sweep()
+  written = {}
   leave("disabled")
   options, hooks, saved, loading, warned = nil, nil, nil, false, false
 end
@@ -421,15 +468,22 @@ function M.enable(config, callbacks)
     group = group,
     pattern = { "laststatus", "fillchars", "ambiwidth" },
     callback = function(event)
-      -- :set run while the header is current (typed, command-line window, <Cmd> map, script)
-      -- starts from the header's local value; take the divider it appended out of the global one.
-      -- Only :set reads that base; :setglobal and :setlocal never copy the header's value.
-      if event.match == "fillchars" and vim.v.option_command == "set" and M.owns(api.nvim_get_current_win()) then
-        local global, divider = vim.go.fillchars, divider_for(vim.v.option_oldglobal or "")
-        for _, cut in ipairs({ "," .. divider, divider .. ",", divider }) do
-          local from = global:find(cut, 1, true)
-          local value = from and global:sub(1, from - 1) .. global:sub(from + #cut)
-          if value and pcall(api.nvim_set_option_value, "fillchars", value, { scope = "global" }) then break end
+      -- Only :set reads the current window's local value; :setglobal and :setlocal never copy it.
+      local old = vim.v.option_oldlocal or ""
+      -- Handled here, so the fallback in decorate() must not replay it a second time.
+      if event.match == "fillchars" then
+        for _, handle in pairs(handles) do
+          handle.drawn, handle.base = nil, nil
+        end
+      end
+      if event.match == "fillchars" and vim.v.option_command == "set" and written[old] then
+        local value = rebase(old, written[old], vim.v.option_oldglobal or "", vim.go.fillchars)
+        if value then pcall(api.nvim_set_option_value, "fillchars", value, { scope = "global" }) end
+      end
+      -- Rebuild now, so a :set chained after this one starts from the new global value.
+      if event.match == "fillchars" and M.selected() and mode ~= "paused" then
+        for _, handle in pairs(handles) do
+          if M.owns(handle.win) then pcall(decorate, handle) end
         end
       end
       M.request("OptionSet")
@@ -503,7 +557,15 @@ end
 -- that cell, so the gap under the last row matches the one above the first, and a left sidebar's
 -- separator continues into it with the global vert character. The glyphs have ambiguous width, so
 -- under ambiwidth=double (or any other layout) the header keeps the global divider.
-local function decorate(handle)
+function decorate(handle)
+  local scope = { scope = "local", win = handle.win }
+  local current = api.nvim_get_option_value("fillchars", scope)
+  -- A :set that fired no OptionSet (an autocmd without ++nested) cleared this value; repair it.
+  if handle.drawn and current == "" and vim.go.fillchars ~= handle.base then
+    local value = rebase(handle.drawn, handle.base, handle.base, vim.go.fillchars)
+    if value then pcall(api.nvim_set_option_value, "fillchars", value, { scope = "global" }) end
+  end
+  handle.drawn, handle.base = nil, nil
   local global, candidates = vim.go.fillchars, { "" }
   if vim.go.laststatus == 3 and vim.go.ambiwidth == "single" then
     local divider = divider_for(global)
@@ -513,10 +575,13 @@ local function decorate(handle)
   end
   -- Compare with the actual local value each time: a user :set may clear it, and a rejected glyph
   -- may become valid later. Rejected candidates write nothing, so an unchanged header costs no write.
-  local scope = { scope = "local", win = handle.win }
-  local current = api.nvim_get_option_value("fillchars", scope)
   for _, value in ipairs(candidates) do
-    if value == current or pcall(api.nvim_set_option_value, "fillchars", value, scope) then return end
+    if value == current or pcall(api.nvim_set_option_value, "fillchars", value, scope) then
+      if value ~= "" then
+        handle.drawn, handle.base, written[value] = value, global, global
+      end
+      return
+    end
   end
 end
 
@@ -733,6 +798,7 @@ function M.flush(reason)
       end
     end
   end
+  sweep()
   guard = false
   if not ok then unavailable(tab, err) end
 end
