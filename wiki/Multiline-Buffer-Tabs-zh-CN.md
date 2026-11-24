@@ -29,8 +29,9 @@
 ```
 
 已有 bufferlines 配置时，请替换插件来源，并将这些选项合入现有的完整配置；不要同时注册两份
-插件。README 预览使用了自定义配色和斜切分隔符。在 `options` 中加入
-`separator_style = "slant"` 可使用该分隔符形状；上面的示例不会替换你的配色方案。
+插件。README 预览使用了 Apollo 配色、斜坡分隔符，以及等宽且不带关闭图标的标签。在
+`options` 中加入 `separator_style = "slope"`、`tab_size = 16`、`enforce_regular_tabs = true`
+与 `show_buffer_close_icons = false` 可得到该外观；上面的示例不会替换你的配色方案。
 
 ## 启用
 

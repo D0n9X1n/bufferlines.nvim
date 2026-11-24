@@ -50,7 +50,9 @@ See [Documentation Pipeline](Documentation-Pipeline).
 
 Images in `wiki/assets` come from real Neovim sessions, never edited by hand. Each scene in
 `scripts/preview/scene.lua` runs in a private tmux server; `ansi2html.py` frames the pane
-as HTML:
+as HTML. Scenes use the Apollo colorscheme with accent-block highlights when
+`apollo-theme` (https://github.com/apollo-theme/apollo-theme) is in `NVIM_TEST_DEPS`, and
+the bundled `catppuccin` otherwise:
 
 ```sh
 NVIM_TEST_DEPS="$HOME/.local/share/nvim/lazy" scripts/preview/render-all.sh /tmp/previews

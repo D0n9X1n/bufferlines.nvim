@@ -48,7 +48,9 @@ python3 scripts/test_wiki_sync.py     # wiki 发布安全性
 ## 预览截图
 
 `wiki/assets` 中的截图均来自真实的 Neovim 会话，不做手工修图。`scripts/preview/scene.lua`
-中的每个场景在独立的 tmux 服务器中运行，`ansi2html.py` 把窗格转成带窗口边框的 HTML：
+中的每个场景在独立的 tmux 服务器中运行，`ansi2html.py` 把窗格转成带窗口边框的 HTML。
+`NVIM_TEST_DEPS` 中有 `apollo-theme`（https://github.com/apollo-theme/apollo-theme）时，场景
+使用 Apollo 配色与强调色块高亮，否则使用内置的 `catppuccin`：
 
 ```sh
 NVIM_TEST_DEPS="$HOME/.local/share/nvim/lazy" scripts/preview/render-all.sh /tmp/previews

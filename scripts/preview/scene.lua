@@ -10,14 +10,21 @@ vim.o.number, vim.o.cursorline, vim.o.signcolumn, vim.o.fillchars = true, true, 
 vim.o.wrap = false
 -- The focused multiline header shows its keys instead of a scratch buffer name.
 function _G.preview_statusline()
-  if vim.bo.filetype == "bufferlines" then return " HEADER  h j k l move  <CR> open  x close  <Esc> back " end
+  if vim.bo.filetype == "bufferlines" then
+    return " HEADER  h j k l / ↑ ↓ move  <CR> open  x close  <Esc> back "
+  end
   return " %f %m%= %{&filetype}  %l:%c "
 end
 vim.o.statusline = "%!v:lua.preview_statusline()"
 -- -u skips filetype detection until after this file, but scenes open buffers right away.
 vim.cmd("filetype plugin on | syntax on")
 vim.o.background = "dark"
-vim.cmd.colorscheme("catppuccin")
+-- The maintainer's own look: Apollo (MIT, apollo-theme/apollo-theme, nvim/ folder) when the
+-- dependency root has it, otherwise the catppuccin bundled with Neovim.
+local apollo = vim.env.NVIM_TEST_DEPS .. "/apollo-theme/nvim"
+local has_apollo = vim.uv.fs_stat(apollo .. "/colors/apollo.lua") ~= nil
+if has_apollo then vim.opt.rtp:append(apollo) end
+vim.cmd.colorscheme(has_apollo and "apollo" or "catppuccin")
 require("nvim-web-devicons").setup({ default = true })
 -- Built-in Lua/Markdown parsers give the code real colours without extra plugins.
 vim.api.nvim_create_autocmd("FileType", {
@@ -80,27 +87,62 @@ local TREE = {
 }
 local function pinned() return require("bufferlines.groups").builtin.pinned:with({ icon = "󰐃" }) end
 
+-- Apollo accent block: the whole current tab is dark text on the accent, the rest sits flush on the
+-- editor background (the maintainer's configuration).
+local function accent(defaults)
+  local highlights, palette = defaults.highlights, require("apollo.palette")
+  local background = api.nvim_get_hl(0, { name = "Normal", link = false }).bg or "NONE"
+  for name, group in pairs(highlights) do
+    if name:match("_selected$") then
+      group.bg = palette.accent
+      if name ~= "pick_selected" then group.fg = palette.background end
+    elseif group.bg ~= nil then
+      group.bg = background
+    end
+  end
+  highlights.buffer_selected = { fg = palette.background, bg = palette.accent, bold = true, italic = false }
+  for _, name in ipairs({ "separator", "separator_visible", "separator_selected" }) do
+    highlights[name] = { fg = background, bg = name == "separator_selected" and palette.accent or background }
+  end
+  return highlights
+end
+-- The maintainer's multiline options: sloped tabs of one width, no close icons.
+local function mine(multiline)
+  return {
+    multiline = multiline,
+    separator_style = "slope",
+    indicator = { style = "icon", icon = " " },
+    show_buffer_close_icons = false,
+    show_close_icon = false,
+    show_tab_indicators = false,
+    max_name_length = 16,
+    tab_size = 16,
+    enforce_regular_tabs = true,
+    truncate_names = true,
+  }
+end
+
 -- Each scene: options for setup(), files to open, optional setup() after opening, optional action() before capture.
 local SCENES = {
   ["multiline-sidebar"] = {
-    options = { multiline = { enabled = true, max_rows = 3 } },
+    options = mine({ enabled = true, max_rows = 3 }),
     files = vim.list_slice(MANY, 1, 12),
     setup = function() sidebar(TREE) end,
     laststatus = 3,
   },
   ["multiline-overflow"] = {
-    options = { multiline = { enabled = true, max_rows = 2 } },
+    options = mine({ enabled = true, max_rows = 2 }),
     files = MANY,
     laststatus = 3,
   },
   ["multiline-navigate"] = {
-    options = { multiline = { enabled = true, max_rows = 3 } },
+    options = mine({ enabled = true, max_rows = 3 }),
     files = vim.list_slice(MANY, 1, 12),
     laststatus = 3,
     action = function()
       local handle = require("bufferlines.multiline.runtime").handles()[api.nvim_get_current_tabpage()]
       api.nvim_set_current_win(handle.win)
-      api.nvim_feedkeys(api.nvim_replace_termcodes("jl", true, false, true), "mx", false)
+      api.nvim_feedkeys(api.nvim_replace_termcodes("<Down>l", true, false, true), "mx", false)
     end,
   },
   default = { options = {}, files = CORE },
@@ -221,7 +263,10 @@ local scene = assert(SCENES[name], "unknown scene " .. name)
 local ready = vim.env.PREVIEW_READY
 local ok, err = pcall(function()
   if scene.laststatus then vim.o.laststatus = scene.laststatus end
-  require("bufferlines").setup({ options = vim.tbl_extend("force", { always_show_bufferline = true }, scene.options) })
+  require("bufferlines").setup({
+    highlights = has_apollo and accent or nil,
+    options = vim.tbl_extend("force", { always_show_bufferline = true }, scene.options),
+  })
   for _, f in ipairs(scene.files) do
     edit(f)
   end

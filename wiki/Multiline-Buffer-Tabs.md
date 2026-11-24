@@ -32,9 +32,10 @@ for a fresh configuration:
 
 If you already configure bufferlines, replace its plugin source and merge these options
 into your existing complete configuration; do not register two copies of the plugin.
-The README preview uses a custom colorscheme and slanted separators. Add
-`separator_style = "slant"` inside `options` for that separator shape; the snippet above
-does not replace your colorscheme.
+The README preview uses the Apollo colorscheme, sloped separators and tabs of one width
+without close icons. Add `separator_style = "slope"`, `tab_size = 16`,
+`enforce_regular_tabs = true` and `show_buffer_close_icons = false` inside `options` for
+that shape; the snippet above does not replace your colorscheme.
 
 ## Enabling
 
