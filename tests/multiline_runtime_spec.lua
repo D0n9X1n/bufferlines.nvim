@@ -1626,6 +1626,63 @@ describe("Multiline runtime", function()
     assert.equals("double", vim.go.ambiwidth)
   end)
 
+  it("parses a literal comma glyph and uses the last vert item", function()
+    vim.o.laststatus = 3
+    runtime.enable(options, hooks)
+    local handle
+    local function local_fcs()
+      runtime.flush("BufEnter")
+      handle = runtime.handles()[api.nvim_get_current_tabpage()]
+      return api.nvim_get_option_value("fillchars", { scope = "local", win = handle.win })
+    end
+    vim.go.fillchars = "vert:,"
+    assert.equals("vert:,,horiz:▔,vertright:,,verthoriz:,", local_fcs())
+    vim.go.fillchars = "vert:A,vert:,,eob:@"
+    assert.equals("vert:A,vert:,,eob:@,horiz:▔,vertright:,,verthoriz:,", local_fcs())
+    vim.go.fillchars = "eob:@,"
+    assert.equals("eob:@,horiz:▔,vertright:│,verthoriz:│", local_fcs())
+  end)
+
+  it("undecorates every tab's header so ambiwidth can change", function()
+    vim.o.laststatus = 3
+    runtime.enable(options, hooks)
+    runtime.flush("test")
+    local first = runtime.handles()[api.nvim_get_current_tabpage()].win
+    vim.cmd("tabnew")
+    runtime.flush("TabEnter")
+    local second = runtime.handles()[api.nvim_get_current_tabpage()].win
+    assert.is_true(first ~= second)
+    vim.o.laststatus = 2
+    runtime.flush("WinResized")
+    for _, win in ipairs({ first, second }) do
+      assert.equals("", api.nvim_get_option_value("fillchars", { scope = "local", win = win }))
+    end
+    vim.go.ambiwidth = "double"
+    assert.equals("double", vim.go.ambiwidth)
+  end)
+
+  it("does not rewrite fillchars on every refresh when the divider is rejected", function()
+    vim.o.laststatus = 3
+    vim.fn.setcellwidths({ { 0x2594, 0x2594, 2 } })
+    local writes, set = 0, api.nvim_set_option_value
+    api.nvim_set_option_value = function(name, ...)
+      if name == "fillchars" then writes = writes + 1 end
+      return set(name, ...)
+    end
+    local ok, err = pcall(function()
+      runtime.enable(options, hooks)
+      runtime.flush("test")
+      writes = 0
+      for _ = 1, 4 do
+        runtime.flush("BufEnter")
+      end
+      assert.equals(0, writes)
+    end)
+    api.nvim_set_option_value = set
+    vim.fn.setcellwidths({})
+    assert(ok, err)
+  end)
+
   it("keeps the global divider when allocated under ambiwidth=double", function()
     vim.o.laststatus = 3
     vim.go.fillchars = "vert:X,eob:@"

@@ -441,6 +441,7 @@ local function allocate(handle, height)
   end
   handle.win =
     api.nvim_open_win(handle.buf, false, { split = "above", win = handle.editor, height = height, noautocmd = true })
+  handle.divider = nil
   vim.w[handle.win][marker] = namespace
   for name, value in pairs({
     wrap = false,
@@ -468,18 +469,24 @@ end
 -- that cell, so the gap under the last row matches the one above the first, and a left sidebar's
 -- separator continues into it with the global vert character. The glyphs have ambiguous width, so
 -- under ambiwidth=double (or any other layout) the header keeps the global divider.
-local function decorate(win)
+local function decorate(handle)
   local value = ""
   if vim.go.laststatus == 3 and vim.go.ambiwidth == "single" then
-    local global = vim.go.fillchars:gsub(",$", "")
-    local vert = "│"
-    for item in ("," .. global):gmatch(",vert:([^,]+)") do
-      vert = item
+    -- Each item's value is exactly one character, which may itself be a comma.
+    local global, vert, items, pos = vim.go.fillchars, "│", {}, 1
+    while pos <= #global do
+      local item, key, char, next_pos = global:match("^((%a+):([%z\1-\127\194-\244][\128-\191]*))()", pos)
+      if not item then break end
+      items[#items + 1] = item
+      if key == "vert" then vert = char end
+      pos = next_pos + 1
     end
-    value = (global == "" and "" or global .. ",") .. "horiz:▔,vertright:" .. vert .. ",verthoriz:" .. vert
+    items[#items + 1] = "horiz:▔,vertright:" .. vert .. ",verthoriz:" .. vert
+    value = table.concat(items, ",")
   end
-  local scope = { scope = "local", win = win }
-  if api.nvim_get_option_value("fillchars", scope) == value then return end
+  local scope = { scope = "local", win = handle.win }
+  if handle.divider == value then return end
+  handle.divider = value
   -- A glyph the user made wider (setcellwidths()) is rejected: keep the global divider instead.
   if not pcall(api.nvim_set_option_value, "fillchars", value, scope) then
     api.nvim_set_option_value("fillchars", "", scope)
@@ -611,7 +618,6 @@ local function render(reason)
     unavailable(tab)
     return
   end
-  decorate(handle.win)
   local lines = {}
   for _, row in ipairs(frame.rows) do
     lines[#lines + 1] = row.text
@@ -690,6 +696,12 @@ function M.flush(reason)
   end
   local tab = api.nvim_get_current_tabpage()
   local ok, err = pcall(render, reason)
+  -- Every tab's header: a stale divider elsewhere would still block a global ambiwidth change.
+  for _, handle in pairs(handles) do
+    if ok and M.owns(handle.win) then
+      ok, err = pcall(decorate, handle)
+    end
+  end
   guard = false
   if not ok then unavailable(tab, err) end
 end
