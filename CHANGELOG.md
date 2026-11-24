@@ -3,6 +3,14 @@
 All notable changes to bufferlines.nvim are recorded here. Release notes on GitHub are
 generated from the commits between tags.
 
+## 1.1.1 - 2026-11-24
+
+### Fixed
+
+- Multiline header: `<Left>` / `<Right>` move between candidates exactly like `h` / `l`, so
+  all four arrow keys match `h` / `j` / `k` / `l`. Before, a global `<Left>` / `<Right>`
+  map (for example buffer cycling) ran inside the header instead.
+
 ## 1.1.0 - 2026-11-24
 
 ### Added

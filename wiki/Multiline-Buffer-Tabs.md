@@ -128,14 +128,15 @@ installed:
 
 | Key | Action |
 | --- | --- |
-| `h` / `l` | Previous / next buffer candidate (no wrap at the ends) |
+| `h` / `l`, `<Left>` / `<Right>` | Previous / next buffer candidate (no wrap at the ends) |
 | `j` / `k`, `<Down>` / `<Up>` | Nearest candidate on the next / previous packed buffer row, skipping group-only rows and scrolling hidden rows into view |
 | `<CR>` | Run the candidate's configured left-click action in the captured editor window, falling back to another valid editor |
 | `<Esc>` | Return to that editor without selecting a buffer |
 | `x` | Run `close_command` on the candidate without activating it |
 
 **There is no `q` mapping.** The five rows above are the complete set: `h`, `j`, `k`,
-`l`, `<Down>`, `<Up>`, `x`, `<CR>` and `<Esc>`. In the header, `q` keeps its usual
+`l`, `<Left>`, `<Down>`, `<Up>`, `<Right>`, `x`, `<CR>` and `<Esc>`. Header maps take
+precedence over your global maps for these keys only while the header is focused. In the header, `q` keeps its usual
 Normal-mode meaning and starts a macro recording. Use `<Esc>` to leave the header.
 
 `x` works even with close icons hidden. It retains header focus and selects the next
