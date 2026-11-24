@@ -421,11 +421,12 @@ end
 local function allocate(handle, height)
   handle.buf = api.nvim_create_buf(false, true)
   vim.b[handle.buf][marker] = namespace
-  for _, key in ipairs({ "h", "j", "k", "l", "x", "<CR>", "<Esc>" }) do
+  local aliases = { ["<Down>"] = "j", ["<Up>"] = "k" }
+  for _, key in ipairs({ "h", "j", "k", "l", "x", "<CR>", "<Esc>", "<Down>", "<Up>" }) do
     vim.keymap.set(
       "n",
       key,
-      function() navigate(handle, key) end,
+      function() navigate(handle, aliases[key] or key) end,
       { buffer = handle.buf, silent = true, nowait = true }
     )
   end
@@ -460,6 +461,28 @@ local function allocate(handle, height)
     winhighlight = "Normal:BufferLinesFill",
   }) do
     vim.wo[handle.win][name] = value
+  end
+end
+
+-- Under laststatus=3 the header's own 'fillchars' draws the divider below it. '▔' sits at the top of
+-- that cell, so the gap under the last row matches the one above the first, and a left sidebar's
+-- separator continues into it with the global vert character. The glyphs have ambiguous width, so
+-- under ambiwidth=double (or any other layout) the header keeps the global divider.
+local function decorate(win)
+  local value = ""
+  if vim.go.laststatus == 3 and vim.go.ambiwidth == "single" then
+    local global = vim.go.fillchars:gsub(",$", "")
+    local vert = "│"
+    for item in ("," .. global):gmatch(",vert:([^,]+)") do
+      vert = item
+    end
+    value = (global == "" and "" or global .. ",") .. "horiz:▔,vertright:" .. vert .. ",verthoriz:" .. vert
+  end
+  local scope = { scope = "local", win = win }
+  if api.nvim_get_option_value("fillchars", scope) == value then return end
+  -- A glyph the user made wider (setcellwidths()) is rejected: keep the global divider instead.
+  if not pcall(api.nvim_set_option_value, "fillchars", value, scope) then
+    api.nvim_set_option_value("fillchars", "", scope)
   end
 end
 
@@ -588,6 +611,7 @@ local function render(reason)
     unavailable(tab)
     return
   end
+  decorate(handle.win)
   local lines = {}
   for _, row in ipairs(frame.rows) do
     lines[#lines + 1] = row.text

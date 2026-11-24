@@ -126,7 +126,13 @@ describe("Multiline runtime", function()
   before_each(function()
     package.loaded["bufferlines.multiline.runtime"] = nil
     runtime = require("bufferlines.multiline.runtime")
-    saved = { showtabline = vim.o.showtabline, mouse = vim.o.mouse, laststatus = vim.o.laststatus }
+    saved = {
+      showtabline = vim.o.showtabline,
+      mouse = vim.o.mouse,
+      laststatus = vim.o.laststatus,
+      fillchars = vim.o.fillchars,
+      ambiwidth = vim.o.ambiwidth,
+    }
     vim.o.showtabline = 2
     vim.o.hidden = true
     editor = api.nvim_get_current_win()
@@ -508,6 +514,56 @@ describe("Multiline runtime", function()
         "return vim.tbl_filter(function(m) return m.lhs == 'h' or m.lhs == 'j' or m.lhs == 'k' or m.lhs == 'l' end, vim.api.nvim_get_keymap('n'))"
       )
     )
+  end)
+
+  it("moves between rows with <Down>/<Up> exactly like j/k", function()
+    local initial = real_layout(20)
+    local ids = child_lua("return ids")
+    input("<C-w>kl")
+    assert.equals(ids[2], child_lua("return snapshot().candidate"))
+    input("<Down>")
+    assert.equals(ids[4], child_lua("return snapshot().candidate"))
+    input("<Up>")
+    assert.equals(ids[2], child_lua("return snapshot().candidate"))
+    input("<Up>") -- already on the first row: no movement, same as k
+    assert.equals(ids[2], child_lua("return snapshot().candidate"))
+    input(string.rep("<Down>", 20))
+    local by_arrows = child_lua("return snapshot()")
+    input(string.rep("k", 20) .. string.rep("j", 20))
+    local by_letters = child_lua("return snapshot()")
+    assert.equals(by_letters.candidate, by_arrows.candidate)
+    assert.equals(by_letters.first, by_arrows.first)
+    assert.is_true(by_arrows.first > 1)
+    assert.equals(initial.handle.win, by_arrows.win)
+    assert.equals(0, child_lua("return #seen"))
+    input("<Esc>")
+    assert.equals(initial.editor, child_lua("return snapshot().win"))
+    assert.same(
+      {},
+      child_lua(
+        "return vim.tbl_filter(function(m) return m.lhs == '<Up>' or m.lhs == '<Down>' end, vim.api.nvim_get_keymap('n'))"
+      )
+    )
+  end)
+
+  it("matches j/k step by step with <Down>/<Up> across scrolled viewports", function()
+    local function drive(down, up)
+      real_layout(20)
+      input("<C-w>kl")
+      local states = {}
+      for _, key in ipairs(vim.list_extend(vim.fn["repeat"]({ down }, 10), vim.fn["repeat"]({ up }, 10))) do
+        input(key)
+        states[#states + 1] = child_lua("local s = snapshot(); return { s.candidate, s.first }")
+      end
+      vim.fn.jobstop(child)
+      child = nil
+      return states
+    end
+    local arrows, letters = drive("<Down>", "<Up>"), drive("j", "k")
+    assert.same(letters, arrows)
+    assert.is_true(arrows[10][2] > 1)
+    assert.is_true(arrows[11][2] > 1)
+    assert.equals(1, arrows[20][2])
   end)
 
   it("navigates with the real plugin frame and configured click callback", function()
@@ -1481,5 +1537,115 @@ describe("Multiline runtime", function()
     assert.equals(0, marks[1][3])
     assert.equals(4, marks[1][4].end_col)
     assert.equals("BufferLinesBufferSelected", marks[1][4].hl_group)
+  end)
+
+  it("draws its divider at the top of the separator cell and keeps the user's other fillchars", function()
+    vim.o.laststatus = 3
+    vim.go.fillchars = "vert:X,eob:@,horiz:#,horizup:U,horizdown:D,vertleft:L,vertright:R,verthoriz:H"
+    vim.cmd("topleft vertical 10new")
+    vim.bo.buftype = "nofile"
+    api.nvim_set_current_win(editor)
+    runtime.enable(options, hooks)
+    runtime.flush("test")
+    local handle = runtime.handles()[api.nvim_get_current_tabpage()]
+    local fcs = {}
+    for item in vim.gsplit(vim.wo[handle.win].fillchars, ",", { plain = true }) do
+      local key, value = item:match("^(%w+):(.*)$")
+      fcs[key] = value
+    end
+    assert.equals("▔", fcs.horiz)
+    assert.equals("@", fcs.eob)
+    assert.equals("X", fcs.vert)
+    assert.equals("", vim.wo[editor].fillchars:match("horiz:▔") or "")
+    vim.cmd("redraw!")
+    local top, left = unpack(api.nvim_win_get_position(handle.win))
+    local row = top + api.nvim_win_get_height(handle.win) + 1
+    local cells = {}
+    for col = left, left + api.nvim_win_get_width(handle.win) do
+      cells[#cells + 1] = vim.fn.screenstring(row, col)
+    end
+    -- The sidebar's vertical separator stays continuous into a top-anchored line.
+    assert.equals("X" .. string.rep("▔", api.nvim_win_get_width(handle.win)), table.concat(cells))
+    assert.equals("X", vim.fn.screenstring(row - 1, left))
+    assert.equals("X", vim.fn.screenstring(row + 1, left))
+    -- Only the header changes: the global value and other separators keep the user's glyphs.
+    assert.equals("vert:X,eob:@,horiz:#,horizup:U,horizdown:D,vertleft:L,vertright:R,verthoriz:H", vim.go.fillchars)
+    assert.equals("", api.nvim_get_option_value("fillchars", { scope = "local", win = editor }))
+    vim.cmd("split")
+    vim.cmd("redraw!")
+    local editor_top = api.nvim_win_get_position(editor)[1] + api.nvim_win_get_height(editor)
+    local upper = api.nvim_get_current_win()
+    local sep = api.nvim_win_get_position(upper)[1] + api.nvim_win_get_height(upper) + 1
+    assert.is_true(sep ~= row and editor_top > 0)
+    assert.equals("#", vim.fn.screenstring(sep, left + 1))
+  end)
+
+  it("keeps the header usable when the divider glyph cannot be applied", function()
+    vim.o.laststatus = 3
+    vim.go.fillchars = "eob:@,"
+    runtime.enable(options, hooks)
+    runtime.flush("test")
+    local handle = runtime.handles()[api.nvim_get_current_tabpage()]
+    assert.is_true(runtime.owns(handle.win))
+    assert.equals("eob:@,horiz:▔,vertright:│,verthoriz:│", vim.wo[handle.win].fillchars)
+    runtime.disable()
+    vim.fn.setcellwidths({ { 0x2594, 0x2594, 2 } })
+    local ok, err = pcall(function()
+      runtime.enable(options, hooks)
+      runtime.flush("test")
+      handle = runtime.handles()[api.nvim_get_current_tabpage()]
+      assert.is_true(runtime.active())
+      assert.is_true(runtime.owns(handle.win))
+      assert.equals("", api.nvim_get_option_value("fillchars", { scope = "local", win = handle.win }))
+    end)
+    vim.fn.setcellwidths({})
+    assert(ok, err)
+  end)
+
+  it("decorates only while laststatus=3 and follows later changes on refresh", function()
+    vim.o.laststatus = 2
+    vim.go.fillchars = "vert:X"
+    runtime.enable(options, hooks)
+    runtime.flush("test")
+    local handle = runtime.handles()[api.nvim_get_current_tabpage()]
+    local function local_fcs() return api.nvim_get_option_value("fillchars", { scope = "local", win = handle.win }) end
+    assert.equals("", local_fcs())
+    -- Without the divider a global ambiwidth change stays unrestricted.
+    vim.go.ambiwidth = "double"
+    vim.go.ambiwidth = "single"
+    vim.o.laststatus = 3
+    runtime.flush("WinResized")
+    assert.equals("vert:X,horiz:▔,vertright:X,verthoriz:X", local_fcs())
+    vim.go.fillchars = "vert:Y"
+    runtime.flush("BufEnter")
+    assert.equals("vert:Y,horiz:▔,vertright:Y,verthoriz:Y", local_fcs())
+    vim.o.laststatus = 2
+    runtime.flush("WinResized")
+    assert.equals("", local_fcs())
+    vim.go.ambiwidth = "double"
+    assert.equals("double", vim.go.ambiwidth)
+  end)
+
+  it("keeps the global divider when allocated under ambiwidth=double", function()
+    vim.o.laststatus = 3
+    vim.go.fillchars = "vert:X,eob:@"
+    runtime.enable(options, hooks)
+    runtime.flush("test")
+    -- Documented limit: the top-anchored glyph is ambiguous-width, so ambiwidth=double is refused
+    -- while that header exists; disable multiline, switch, then enable again.
+    local ok, err = pcall(function() vim.go.ambiwidth = "double" end)
+    assert.is_false(ok)
+    assert.matches("E835", err)
+    runtime.disable()
+    vim.go.ambiwidth = "double"
+    runtime.enable(options, hooks)
+    runtime.flush("test")
+    local handle = runtime.handles()[api.nvim_get_current_tabpage()]
+    assert.is_true(runtime.owns(handle.win))
+    assert.equals("", api.nvim_get_option_value("fillchars", { scope = "local", win = handle.win }))
+    vim.go.ambiwidth = "single"
+    vim.go.ambiwidth = "double"
+    assert.equals("double", vim.go.ambiwidth)
+    vim.go.ambiwidth = "single"
   end)
 end)

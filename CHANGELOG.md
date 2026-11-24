@@ -3,6 +3,21 @@
 All notable changes to bufferlines.nvim are recorded here. Release notes on GitHub are
 generated from the commits between tags.
 
+## 1.1.0 - 2026-11-24
+
+### Added
+
+- Multiline header: `<Down>` / `<Up>` move between rows exactly like `j` / `k`
+  ([#4](https://github.com/D0n9X1n/bufferlines.nvim/issues/4)).
+
+### Fixed
+
+- Multiline header: with `laststatus=3` the divider below the header is drawn at the top
+  of its cell (`▔`), so the space below the last row matches the space above the first. A
+  left sidebar's separator joins it with your global `vert` character; other `fillchars`
+  items are kept. With `ambiwidth=double` the global divider is kept
+  ([#5](https://github.com/D0n9X1n/bufferlines.nvim/issues/5)).
+
 ## 1.0.0 - 2026-11-11
 
 First release of bufferlines.nvim, a renamed and refactored fork of
