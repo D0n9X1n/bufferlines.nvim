@@ -83,7 +83,8 @@ bufferlines.setup(single_row)
 - 在 `laststatus=3` 下，这部分额外空间是一行窗口分隔线。header 在该行用 `▔` 绘制分隔线，
   位于单元格顶部，因此最后一行下方的间距与第一行上方的间距相同。左侧侧边栏的竖直分隔线会以
   你的全局 `vert` 字符（包括字面量 `,`）延续到这条线上，你的其他 `fillchars` 项保持不变。
-  由 header 下方窗口绘制的交接点（右侧侧边栏或编辑区的竖直分割）保留你的全局字符。在
+  由 header 下方窗口绘制的交接点（右侧侧边栏或编辑区的竖直分割）使用这些窗口自己的
+  `fillchars`，插件不会修改它们。在
   `ambiwidth=double`、其他 `laststatus` 取值，或 `setcellwidths()` 加宽了 `▔` 时，header
   保留你的全局分隔线。header 会在所有标签页中跟随之后对 `laststatus`、`fillchars` 与
   `ambiwidth` 的修改。显示该分隔线期间，由于 `▔` 是宽度不明确的字符，

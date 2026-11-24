@@ -544,6 +544,15 @@ describe("Multiline runtime", function()
         "return vim.tbl_filter(function(m) return m.lhs == '<Up>' or m.lhs == '<Down>' end, vim.api.nvim_get_keymap('n'))"
       )
     )
+    local flags = child_lua([=[
+      local out = {}
+      local buf = runtime.handles()[tab].buf
+      for _, m in ipairs(vim.api.nvim_buf_get_keymap(buf, "n")) do
+        if m.lhs == "<Up>" or m.lhs == "<Down>" then out[m.lhs] = { m.buffer == buf, m.nowait } end
+      end
+      return out
+    ]=])
+    assert.same({ ["<Up>"] = { true, 1 }, ["<Down>"] = { true, 1 } }, flags)
   end)
 
   it("matches j/k step by step with <Down>/<Up> across scrolled viewports", function()
@@ -1644,6 +1653,11 @@ describe("Multiline runtime", function()
     -- Items are kept verbatim, including a combining mark and later items.
     vim.go.fillchars = "eob:a\204\129,vert:X,foldinner:x"
     assert.equals("eob:a\204\129,vert:X,foldinner:x,horiz:▔,vertright:X,verthoriz:X", local_fcs())
+    -- The junction repeats the raw vert value Neovim renders: escapes and combining marks included.
+    vim.go.fillchars = [[vert:\u2503]]
+    assert.equals([[vert:\u2503,horiz:▔,vertright:\u2503,verthoriz:\u2503]], local_fcs())
+    vim.go.fillchars = "vert:a\204\129,eob:@"
+    assert.equals("vert:a\204\129,eob:@,horiz:▔,vertright:a\204\129,verthoriz:a\204\129", local_fcs())
   end)
 
   it("undecorates every tab's header so ambiwidth can change", function()
@@ -1664,13 +1678,58 @@ describe("Multiline runtime", function()
     assert.equals("double", vim.go.ambiwidth)
   end)
 
+  it("undecorates other tabs' headers even when the current tab fails to render", function()
+    vim.o.laststatus = 3
+    runtime.enable(options, hooks)
+    runtime.flush("test")
+    local first = runtime.handles()[api.nvim_get_current_tabpage()].win
+    vim.cmd("tabnew")
+    runtime.flush("TabEnter")
+    assert.is_true(runtime.handles()[api.nvim_get_current_tabpage()].win ~= first)
+    hooks.frame = function() error("boom") end
+    vim.o.laststatus = 2
+    local notify, warnings = vim.notify, {}
+    vim.notify = function(message) warnings[#warnings + 1] = message end
+    runtime.flush("WinResized")
+    sync() -- the warning is scheduled
+    vim.notify = notify
+    assert.matches("boom", warnings[1])
+    assert.equals("", api.nvim_get_option_value("fillchars", { scope = "local", win = first }))
+    vim.go.ambiwidth = "double"
+    assert.equals("double", vim.go.ambiwidth)
+  end)
+
+  it("re-applies a divider the user cleared and retries one that becomes valid", function()
+    vim.o.laststatus = 3
+    vim.go.fillchars = "vert:X"
+    runtime.enable(options, hooks)
+    runtime.flush("test")
+    local handle = runtime.handles()[api.nvim_get_current_tabpage()]
+    local function local_fcs() return api.nvim_get_option_value("fillchars", { scope = "local", win = handle.win }) end
+    assert.equals("vert:X,horiz:▔,vertright:X,verthoriz:X", local_fcs())
+    -- :set from inside the header clears its local value.
+    api.nvim_win_call(handle.win, function() vim.cmd("set fillchars=vert:X") end)
+    assert.equals("", local_fcs())
+    runtime.flush("BufEnter")
+    assert.equals("vert:X,horiz:▔,vertright:X,verthoriz:X", local_fcs())
+    runtime.disable()
+    vim.fn.setcellwidths({ { 0x2594, 0x2594, 2 } })
+    runtime.enable(options, hooks)
+    runtime.flush("test")
+    handle = runtime.handles()[api.nvim_get_current_tabpage()]
+    assert.equals("", local_fcs())
+    vim.fn.setcellwidths({})
+    runtime.flush("BufEnter")
+    assert.equals("vert:X,horiz:▔,vertright:X,verthoriz:X", local_fcs())
+  end)
+
   it("does not rewrite fillchars on every refresh when the divider is rejected", function()
     vim.o.laststatus = 3
     vim.fn.setcellwidths({ { 0x2594, 0x2594, 2 } })
     local writes, set = 0, api.nvim_set_option_value
     api.nvim_set_option_value = function(name, ...)
+      set(name, ...) -- errors propagate: only applied values count as writes
       if name == "fillchars" then writes = writes + 1 end
-      return set(name, ...)
     end
     local ok, err = pcall(function()
       runtime.enable(options, hooks)
@@ -1679,6 +1738,14 @@ describe("Multiline runtime", function()
       for _ = 1, 4 do
         runtime.flush("BufEnter")
       end
+      assert.equals(0, writes)
+      -- An undecorated header (laststatus=2) is never written either, not even with "".
+      runtime.disable()
+      vim.o.laststatus = 2
+      writes = 0
+      runtime.enable(options, hooks)
+      runtime.flush("test")
+      runtime.flush("BufEnter")
       assert.equals(0, writes)
     end)
     api.nvim_set_option_value = set
@@ -1705,7 +1772,11 @@ describe("Multiline runtime", function()
     child_lua("vim.cmd('set laststatus=2')")
     settle(function() return local_fcs() == "" end)
     assert.equals("double", child_lua("vim.cmd('set ambiwidth=double'); return vim.go.ambiwidth"))
-    child_lua("vim.cmd('set ambiwidth=single laststatus=3')")
+    child_lua("vim.cmd('set laststatus=3')")
+    child_lua("runtime.flush('test')")
+    assert.equals("", local_fcs())
+    -- Only ambiwidth changes here: its own OptionSet must bring the divider back.
+    child_lua("vim.cmd('set ambiwidth=single')")
     settle(function() return local_fcs() == "vert:Y,horiz:▔,vertright:Y,verthoriz:Y" end)
   end)
 

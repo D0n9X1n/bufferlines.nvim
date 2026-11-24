@@ -447,7 +447,6 @@ local function allocate(handle, height)
   end
   handle.win =
     api.nvim_open_win(handle.buf, false, { split = "above", win = handle.editor, height = height, noautocmd = true })
-  handle.divider = nil
   vim.w[handle.win][marker] = namespace
   for name, value in pairs({
     wrap = false,
@@ -478,20 +477,28 @@ end
 local function decorate(handle)
   local global, candidates = vim.go.fillchars, { "" }
   if vim.go.laststatus == 3 and vim.go.ambiwidth == "single" then
-    -- The last vert item follows a separator; its one-character value may itself be a comma.
-    local vert = "│"
-    for char in ("," .. global):gmatch(",vert:([%z\1-\127\194-\244][\128-\191]*)") do
-      vert = char
+    -- The junction repeats the raw text of the last vert item (escapes and combining marks kept):
+    -- it runs to the next ",key:" or the end, minus a trailing separator unless it is the glyph.
+    local vert, items, start = "│", "," .. global, nil
+    for pos in items:gmatch(",vert:()") do
+      start = pos
+    end
+    if start then
+      local stop = items:find(",%a+:", start + 1)
+      vert = items:sub(start, (stop or #items + 1) - 1)
+      if #vert > 1 then vert = vert:gsub(",$", "") end
     end
     local divider = "horiz:▔,vertright:" .. vert .. ",verthoriz:" .. vert
     -- Append to the user's items verbatim; Neovim validates. The second form follows a trailing
     -- separator, and "" keeps the global divider when a glyph is rejected (e.g. setcellwidths()).
     candidates = { global == "" and divider or global .. "," .. divider, global .. divider, "" }
   end
-  if handle.divider == candidates[1] then return end
-  handle.divider = candidates[1]
+  -- Compare with the actual local value each time: a user :set may clear it, and a rejected glyph
+  -- may become valid later. Rejected candidates write nothing, so an unchanged header costs no write.
+  local scope = { scope = "local", win = handle.win }
+  local current = api.nvim_get_option_value("fillchars", scope)
   for _, value in ipairs(candidates) do
-    if pcall(api.nvim_set_option_value, "fillchars", value, { scope = "local", win = handle.win }) then return end
+    if value == current or pcall(api.nvim_set_option_value, "fillchars", value, scope) then return end
   end
 end
 
@@ -698,10 +705,14 @@ function M.flush(reason)
   end
   local tab = api.nvim_get_current_tabpage()
   local ok, err = pcall(render, reason)
-  -- Every tab's header: a stale divider elsewhere would still block a global ambiwidth change.
+  -- Every tab's header, even when this render failed: a stale divider elsewhere would still block a
+  -- global ambiwidth change.
   for _, handle in pairs(handles) do
-    if ok and M.owns(handle.win) then
-      ok, err = pcall(decorate, handle)
+    if M.owns(handle.win) then
+      local decorated, problem = pcall(decorate, handle)
+      if ok and not decorated then
+        ok, err = false, problem
+      end
     end
   end
   guard = false
