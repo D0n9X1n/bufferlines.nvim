@@ -126,7 +126,13 @@ describe("Multiline runtime", function()
   before_each(function()
     package.loaded["bufferlines.multiline.runtime"] = nil
     runtime = require("bufferlines.multiline.runtime")
-    saved = { showtabline = vim.o.showtabline, mouse = vim.o.mouse, laststatus = vim.o.laststatus }
+    saved = {
+      showtabline = vim.o.showtabline,
+      mouse = vim.o.mouse,
+      laststatus = vim.o.laststatus,
+      fillchars = vim.o.fillchars,
+      ambiwidth = vim.o.ambiwidth,
+    }
     vim.o.showtabline = 2
     vim.o.hidden = true
     editor = api.nvim_get_current_win()
@@ -508,6 +514,65 @@ describe("Multiline runtime", function()
         "return vim.tbl_filter(function(m) return m.lhs == 'h' or m.lhs == 'j' or m.lhs == 'k' or m.lhs == 'l' end, vim.api.nvim_get_keymap('n'))"
       )
     )
+  end)
+
+  it("moves between rows with <Down>/<Up> exactly like j/k", function()
+    local initial = real_layout(20)
+    local ids = child_lua("return ids")
+    input("<C-w>kl")
+    assert.equals(ids[2], child_lua("return snapshot().candidate"))
+    input("<Down>")
+    assert.equals(ids[4], child_lua("return snapshot().candidate"))
+    input("<Up>")
+    assert.equals(ids[2], child_lua("return snapshot().candidate"))
+    input("<Up>") -- already on the first row: no movement, same as k
+    assert.equals(ids[2], child_lua("return snapshot().candidate"))
+    input(string.rep("<Down>", 20))
+    local by_arrows = child_lua("return snapshot()")
+    input(string.rep("k", 20) .. string.rep("j", 20))
+    local by_letters = child_lua("return snapshot()")
+    assert.equals(by_letters.candidate, by_arrows.candidate)
+    assert.equals(by_letters.first, by_arrows.first)
+    assert.is_true(by_arrows.first > 1)
+    assert.equals(initial.handle.win, by_arrows.win)
+    assert.equals(0, child_lua("return #seen"))
+    input("<Esc>")
+    assert.equals(initial.editor, child_lua("return snapshot().win"))
+    assert.same(
+      {},
+      child_lua(
+        "return vim.tbl_filter(function(m) return m.lhs == '<Up>' or m.lhs == '<Down>' end, vim.api.nvim_get_keymap('n'))"
+      )
+    )
+    local flags = child_lua([=[
+      local out = {}
+      local buf = runtime.handles()[tab].buf
+      for _, m in ipairs(vim.api.nvim_buf_get_keymap(buf, "n")) do
+        if m.lhs == "<Up>" or m.lhs == "<Down>" then out[m.lhs] = { m.buffer == buf, m.nowait } end
+      end
+      return out
+    ]=])
+    assert.same({ ["<Up>"] = { true, 1 }, ["<Down>"] = { true, 1 } }, flags)
+  end)
+
+  it("matches j/k step by step with <Down>/<Up> across scrolled viewports", function()
+    local function drive(down, up)
+      real_layout(20)
+      input("<C-w>kl")
+      local states = {}
+      for _, key in ipairs(vim.list_extend(vim.fn["repeat"]({ down }, 10), vim.fn["repeat"]({ up }, 10))) do
+        input(key)
+        states[#states + 1] = child_lua("local s = snapshot(); return { s.candidate, s.first }")
+      end
+      vim.fn.jobstop(child)
+      child = nil
+      return states
+    end
+    local arrows, letters = drive("<Down>", "<Up>"), drive("j", "k")
+    assert.same(letters, arrows)
+    assert.is_true(arrows[10][2] > 1)
+    assert.is_true(arrows[11][2] > 1)
+    assert.equals(1, arrows[20][2])
   end)
 
   it("navigates with the real plugin frame and configured click callback", function()
@@ -1481,5 +1546,383 @@ describe("Multiline runtime", function()
     assert.equals(0, marks[1][3])
     assert.equals(4, marks[1][4].end_col)
     assert.equals("BufferLinesBufferSelected", marks[1][4].hl_group)
+  end)
+
+  it("draws its divider at the top of the separator cell and keeps the user's other fillchars", function()
+    vim.o.laststatus = 3
+    vim.go.fillchars = "vert:X,eob:@,horiz:#,horizup:U,horizdown:D,vertleft:L,vertright:R,verthoriz:H"
+    vim.cmd("topleft vertical 10new")
+    vim.bo.buftype = "nofile"
+    api.nvim_set_current_win(editor)
+    runtime.enable(options, hooks)
+    runtime.flush("test")
+    local handle = runtime.handles()[api.nvim_get_current_tabpage()]
+    local fcs = {}
+    for item in vim.gsplit(vim.wo[handle.win].fillchars, ",", { plain = true }) do
+      local key, value = item:match("^(%w+):(.*)$")
+      fcs[key] = value
+    end
+    assert.equals("▔", fcs.horiz)
+    assert.equals("@", fcs.eob)
+    assert.equals("X", fcs.vert)
+    assert.equals("", vim.wo[editor].fillchars:match("horiz:▔") or "")
+    vim.cmd("redraw!")
+    local top, left = unpack(api.nvim_win_get_position(handle.win))
+    local row = top + api.nvim_win_get_height(handle.win) + 1
+    local cells = {}
+    for col = left, left + api.nvim_win_get_width(handle.win) do
+      cells[#cells + 1] = vim.fn.screenstring(row, col)
+    end
+    -- The sidebar's vertical separator stays continuous into a top-anchored line.
+    assert.equals("X" .. string.rep("▔", api.nvim_win_get_width(handle.win)), table.concat(cells))
+    assert.equals("X", vim.fn.screenstring(row - 1, left))
+    assert.equals("X", vim.fn.screenstring(row + 1, left))
+    -- Only the header changes: the global value and other separators keep the user's glyphs.
+    assert.equals("vert:X,eob:@,horiz:#,horizup:U,horizdown:D,vertleft:L,vertright:R,verthoriz:H", vim.go.fillchars)
+    assert.equals("", api.nvim_get_option_value("fillchars", { scope = "local", win = editor }))
+    vim.cmd("split")
+    vim.cmd("redraw!")
+    local editor_top = api.nvim_win_get_position(editor)[1] + api.nvim_win_get_height(editor)
+    local upper = api.nvim_get_current_win()
+    local sep = api.nvim_win_get_position(upper)[1] + api.nvim_win_get_height(upper) + 1
+    assert.is_true(sep ~= row and editor_top > 0)
+    assert.equals("#", vim.fn.screenstring(sep, left + 1))
+  end)
+
+  it("keeps the header usable when the divider glyph cannot be applied", function()
+    vim.o.laststatus = 3
+    vim.go.fillchars = "eob:@,"
+    runtime.enable(options, hooks)
+    runtime.flush("test")
+    local handle = runtime.handles()[api.nvim_get_current_tabpage()]
+    assert.is_true(runtime.owns(handle.win))
+    assert.equals("eob:@,horiz:▔,vertright:│,verthoriz:│", vim.wo[handle.win].fillchars)
+    runtime.disable()
+    vim.fn.setcellwidths({ { 0x2594, 0x2594, 2 } })
+    local ok, err = pcall(function()
+      runtime.enable(options, hooks)
+      runtime.flush("test")
+      handle = runtime.handles()[api.nvim_get_current_tabpage()]
+      assert.is_true(runtime.active())
+      assert.is_true(runtime.owns(handle.win))
+      assert.equals("", api.nvim_get_option_value("fillchars", { scope = "local", win = handle.win }))
+    end)
+    vim.fn.setcellwidths({})
+    assert(ok, err)
+  end)
+
+  it("decorates only while laststatus=3 and follows later changes on refresh", function()
+    vim.o.laststatus = 2
+    vim.go.fillchars = "vert:X"
+    runtime.enable(options, hooks)
+    runtime.flush("test")
+    local handle = runtime.handles()[api.nvim_get_current_tabpage()]
+    local function local_fcs() return api.nvim_get_option_value("fillchars", { scope = "local", win = handle.win }) end
+    assert.equals("", local_fcs())
+    -- Without the divider a global ambiwidth change stays unrestricted.
+    vim.go.ambiwidth = "double"
+    vim.go.ambiwidth = "single"
+    vim.o.laststatus = 3
+    runtime.flush("WinResized")
+    assert.equals("vert:X,horiz:▔,vertright:X,verthoriz:X", local_fcs())
+    vim.go.fillchars = "vert:Y"
+    runtime.flush("BufEnter")
+    assert.equals("vert:Y,horiz:▔,vertright:Y,verthoriz:Y", local_fcs())
+    vim.o.laststatus = 2
+    runtime.flush("WinResized")
+    assert.equals("", local_fcs())
+    vim.go.ambiwidth = "double"
+    assert.equals("double", vim.go.ambiwidth)
+  end)
+
+  it("parses a literal comma glyph and uses the last vert item", function()
+    vim.o.laststatus = 3
+    runtime.enable(options, hooks)
+    local handle
+    local function local_fcs()
+      runtime.flush("BufEnter")
+      handle = runtime.handles()[api.nvim_get_current_tabpage()]
+      return api.nvim_get_option_value("fillchars", { scope = "local", win = handle.win })
+    end
+    vim.go.fillchars = "vert:,"
+    assert.equals("vert:,,horiz:▔,vertright:,,verthoriz:,", local_fcs())
+    vim.go.fillchars = "vert:A,vert:,,eob:@"
+    assert.equals("vert:A,vert:,,eob:@,horiz:▔,vertright:,,verthoriz:,", local_fcs())
+    vim.go.fillchars = "eob:@,"
+    assert.equals("eob:@,horiz:▔,vertright:│,verthoriz:│", local_fcs())
+    -- Items are kept verbatim, including a combining mark and later items.
+    vim.go.fillchars = "eob:a\204\129,vert:X,foldinner:x"
+    assert.equals("eob:a\204\129,vert:X,foldinner:x,horiz:▔,vertright:X,verthoriz:X", local_fcs())
+    -- The junction repeats the raw vert value Neovim renders: escapes and combining marks included.
+    vim.go.fillchars = [[vert:\u2503]]
+    assert.equals([[vert:\u2503,horiz:▔,vertright:\u2503,verthoriz:\u2503]], local_fcs())
+    vim.go.fillchars = "vert:a\204\129,eob:@"
+    assert.equals("vert:a\204\129,eob:@,horiz:▔,vertright:a\204\129,verthoriz:a\204\129", local_fcs())
+  end)
+
+  it("undecorates every tab's header so ambiwidth can change", function()
+    vim.o.laststatus = 3
+    runtime.enable(options, hooks)
+    runtime.flush("test")
+    local first = runtime.handles()[api.nvim_get_current_tabpage()].win
+    vim.cmd("tabnew")
+    runtime.flush("TabEnter")
+    local second = runtime.handles()[api.nvim_get_current_tabpage()].win
+    assert.is_true(first ~= second)
+    vim.o.laststatus = 2
+    runtime.flush("WinResized")
+    for _, win in ipairs({ first, second }) do
+      assert.equals("", api.nvim_get_option_value("fillchars", { scope = "local", win = win }))
+    end
+    vim.go.ambiwidth = "double"
+    assert.equals("double", vim.go.ambiwidth)
+  end)
+
+  it("undecorates other tabs' headers even when the current tab fails to render", function()
+    vim.o.laststatus = 3
+    runtime.enable(options, hooks)
+    runtime.flush("test")
+    local first = runtime.handles()[api.nvim_get_current_tabpage()].win
+    vim.cmd("tabnew")
+    runtime.flush("TabEnter")
+    assert.is_true(runtime.handles()[api.nvim_get_current_tabpage()].win ~= first)
+    hooks.frame = function() error("boom") end
+    vim.o.laststatus = 2
+    local notify, warnings = vim.notify, {}
+    vim.notify = function(message) warnings[#warnings + 1] = message end
+    runtime.flush("WinResized")
+    sync() -- the warning is scheduled
+    vim.notify = notify
+    assert.matches("boom", warnings[1])
+    assert.equals("", api.nvim_get_option_value("fillchars", { scope = "local", win = first }))
+    vim.go.ambiwidth = "double"
+    assert.equals("double", vim.go.ambiwidth)
+  end)
+
+  it("re-applies a divider the user cleared and retries one that becomes valid", function()
+    vim.o.laststatus = 3
+    vim.go.fillchars = "vert:X"
+    runtime.enable(options, hooks)
+    runtime.flush("test")
+    local handle = runtime.handles()[api.nvim_get_current_tabpage()]
+    local function local_fcs() return api.nvim_get_option_value("fillchars", { scope = "local", win = handle.win }) end
+    assert.equals("vert:X,horiz:▔,vertright:X,verthoriz:X", local_fcs())
+    -- :set from inside the header clears its local value.
+    api.nvim_win_call(handle.win, function() vim.cmd("set fillchars=vert:X") end)
+    assert.equals("", local_fcs())
+    runtime.flush("BufEnter")
+    assert.equals("vert:X,horiz:▔,vertright:X,verthoriz:X", local_fcs())
+    runtime.disable()
+    vim.fn.setcellwidths({ { 0x2594, 0x2594, 2 } })
+    runtime.enable(options, hooks)
+    runtime.flush("test")
+    handle = runtime.handles()[api.nvim_get_current_tabpage()]
+    assert.equals("", local_fcs())
+    vim.fn.setcellwidths({})
+    runtime.flush("BufEnter")
+    assert.equals("vert:X,horiz:▔,vertright:X,verthoriz:X", local_fcs())
+  end)
+
+  it("does not rewrite fillchars on every refresh when the divider is rejected", function()
+    vim.o.laststatus = 3
+    vim.fn.setcellwidths({ { 0x2594, 0x2594, 2 } })
+    local writes, set = 0, api.nvim_set_option_value
+    api.nvim_set_option_value = function(name, ...)
+      set(name, ...) -- errors propagate: only applied values count as writes
+      if name == "fillchars" then writes = writes + 1 end
+    end
+    local ok, err = pcall(function()
+      runtime.enable(options, hooks)
+      runtime.flush("test")
+      writes = 0
+      for _ = 1, 4 do
+        runtime.flush("BufEnter")
+      end
+      assert.equals(0, writes)
+      -- Neither is a header whose divider is already in place.
+      runtime.disable()
+      vim.fn.setcellwidths({})
+      runtime.enable(options, hooks)
+      runtime.flush("test")
+      writes = 0
+      for _ = 1, 4 do
+        runtime.flush("BufEnter")
+      end
+      assert.equals(0, writes)
+      -- An undecorated header (laststatus=2) is never written either, not even with "".
+      runtime.disable()
+      vim.o.laststatus = 2
+      writes = 0
+      runtime.enable(options, hooks)
+      runtime.flush("test")
+      runtime.flush("BufEnter")
+      assert.equals(0, writes)
+    end)
+    api.nvim_set_option_value = set
+    vim.fn.setcellwidths({})
+    assert(ok, err)
+  end)
+
+  it("refreshes the divider when laststatus, fillchars or ambiwidth change at runtime", function()
+    -- A started child: OptionSet does not fire while the test runner itself is still starting up.
+    start_child()
+    child_lua([=[
+      vim.cmd("set laststatus=3 fillchars=vert:X")
+      runtime.flush("test")
+      function local_fcs()
+        local h = runtime.handles()[vim.api.nvim_get_current_tabpage()]
+        return vim.api.nvim_get_option_value("fillchars", { scope = "local", win = h.win })
+      end
+    ]=])
+    local function local_fcs() return child_lua("return local_fcs()") end
+    assert.equals("vert:X,horiz:▔,vertright:X,verthoriz:X", local_fcs())
+    -- No manual flush: real option changes alone must refresh the header (window sizes do not change).
+    child_lua("vim.cmd('set fillchars=vert:Y')")
+    settle(function() return local_fcs() == "vert:Y,horiz:▔,vertright:Y,verthoriz:Y" end)
+    child_lua("vim.cmd('set laststatus=2')")
+    settle(function() return local_fcs() == "" end)
+    assert.equals("double", child_lua("vim.cmd('set ambiwidth=double'); return vim.go.ambiwidth"))
+    child_lua("vim.cmd('set laststatus=3')")
+    child_lua("runtime.flush('test')")
+    assert.equals("", local_fcs())
+    -- Only ambiwidth changes here: its own OptionSet must bring the divider back.
+    child_lua("vim.cmd('set ambiwidth=single')")
+    settle(function() return local_fcs() == "vert:Y,horiz:▔,vertright:Y,verthoriz:Y" end)
+  end)
+
+  it("leaves :set from the header to Neovim and clears the divider from split copies", function()
+    start_child()
+    child_lua([=[
+      vim.cmd("set laststatus=3 fillchars=vert:X")
+      vim.cmd("split")
+      runtime.flush("test")
+      vim.api.nvim_set_current_win(runtime.handles()[tab].win)
+      function local_fcs(win)
+        return vim.api.nvim_get_option_value("fillchars", { scope = "local", win = win or runtime.handles()[tab].win })
+      end
+    ]=])
+    assert.equals("vert:X,horiz:▔,vertright:X,verthoriz:X", child_lua("return local_fcs()"))
+    -- :setglobal, :setlocal and a plain :set assignment never start from the header's value.
+    input(":setglobal fillchars=vert:Y<CR>")
+    assert.equals("vert:Y", child_lua("return vim.go.fillchars"))
+    settle(function() return child_lua("return local_fcs()") == "vert:Y,horiz:▔,vertright:Y,verthoriz:Y" end)
+    input(":setlocal fillchars=eob:@<CR>")
+    assert.equals("vert:Y", child_lua("return vim.go.fillchars"))
+    input(":set fillchars=vert:X,fold:-<CR>")
+    assert.equals("vert:X,fold:-", child_lua("return vim.go.fillchars"))
+    -- Documented: +=, ^= and -= start from the current window's value (Neovim's rule for
+    -- global-local options), so from the header they copy its divider; assigning again recovers.
+    settle(function() return child_lua("return local_fcs()") == "vert:X,fold:-,horiz:▔,vertright:X,verthoriz:X" end)
+    input(":set fillchars+=eob:@<CR>")
+    assert.equals("vert:X,fold:-,horiz:▔,vertright:X,verthoriz:X,eob:@", child_lua("return vim.go.fillchars"))
+    input(":set fillchars=vert:X<CR>")
+    assert.equals("vert:X", child_lua("return vim.go.fillchars"))
+    -- :split in the header copies its window options; the copy shows the header buffer and must
+    -- not keep the divider, or ambiwidth=double would still be refused after the header gives it up.
+    settle(function() return child_lua("return local_fcs()") == "vert:X,horiz:▔,vertright:X,verthoriz:X" end)
+    child_lua("vim.api.nvim_set_option_value('fillchars', 'horiz:Z', { scope = 'local', win = editor })")
+    input(":split<CR>")
+    local copy = child_lua("return vim.api.nvim_get_current_win()")
+    assert.is_false(child_lua("return runtime.owns(...)", { copy }))
+    settle(function() return child_lua("return local_fcs(...)", { copy }) == "" end)
+    -- A window showing a user buffer keeps its own local value.
+    assert.equals("horiz:Z", child_lua("return local_fcs(editor)"))
+    child_lua("vim.cmd('set laststatus=2')")
+    settle(function() return child_lua("return local_fcs()") == "" end)
+    assert.equals("double", child_lua("vim.cmd('set ambiwidth=double'); return vim.go.ambiwidth"))
+    assert.equals("vert:X", child_lua("return vim.go.fillchars"))
+  end)
+
+  it("runs no user OptionSet handler while it writes divider values", function()
+    start_child()
+    child_lua([=[
+      vim.cmd("set laststatus=3 fillchars=vert:X")
+      runtime.flush("test")
+      local header = runtime.handles()[tab].win
+      vim.api.nvim_set_current_win(header)
+      vim.cmd("split")
+      vim.api.nvim_set_current_win(header)
+      vim.cmd("split")
+      vim.api.nvim_set_current_win(editor)
+      -- A handler that would undo or race the plugin's writes, if they ran user autocommands.
+      fired = 0
+      vim.api.nvim_create_autocmd("OptionSet", { pattern = "fillchars", callback = function()
+        fired = fired + 1
+        vim.cmd("let &l:fillchars = v:option_old | set laststatus=2")
+      end })
+      function divided()
+        local n = 0
+        for _, win in ipairs(vim.api.nvim_list_wins()) do
+          if vim.api.nvim_get_option_value("fillchars", { scope = "local", win = win }):find("▔") then n = n + 1 end
+        end
+        return n
+      end
+    ]=])
+    -- Clearing both split copies and the header, then decorating it again: no handler runs.
+    child_lua("vim.cmd('set laststatus=2')")
+    settle(function() return child_lua("return divided()") == 0 end)
+    child_lua("vim.cmd('set laststatus=3')")
+    settle(function() return child_lua("return divided()") == 1 end)
+    assert.equals(0, child_lua("return fired"))
+    assert.equals(3, child_lua("return vim.go.laststatus"))
+  end)
+
+  it("falls back to the next divider candidate inside :silent!", function()
+    start_child()
+    child_lua([=[
+      vim.cmd("set laststatus=2 fillchars=eob:@,")
+      runtime.flush("test")
+      vim.v.errmsg = ""
+      -- :silent! makes a failed inner write look like success to the caller; the trailing
+      -- separator rejects the first candidate, so the second one must still be applied.
+      vim.cmd("noautocmd set laststatus=3 | silent! lua require('bufferlines.multiline.runtime').flush('test')")
+    ]=])
+    local h = child_lua("return runtime.handles()[tab].win")
+    assert.equals(
+      "eob:@,horiz:▔,vertright:│,verthoriz:│",
+      child_lua("return vim.api.nvim_get_option_value('fillchars', { scope = 'local', win = ... })", { h })
+    )
+    assert.equals("", child_lua("return vim.v.errmsg"))
+  end)
+
+  it("joins a sidebar with Neovim's fallback vert when the global value has none", function()
+    vim.o.laststatus = 3
+    vim.go.fillchars = ""
+    -- A widened "│" makes Neovim draw vertical separators with "|".
+    vim.fn.setcellwidths({ { 0x2502, 0x2502, 2 } })
+    local ok, err = pcall(function()
+      runtime.enable(options, hooks)
+      runtime.flush("test")
+      local handle = runtime.handles()[api.nvim_get_current_tabpage()]
+      assert.equals(
+        "horiz:▔,vertright:|,verthoriz:|",
+        api.nvim_get_option_value("fillchars", { scope = "local", win = handle.win })
+      )
+    end)
+    vim.fn.setcellwidths({})
+    assert(ok, err)
+  end)
+
+  it("keeps the global divider when allocated under ambiwidth=double", function()
+    vim.o.laststatus = 3
+    vim.go.fillchars = "vert:X,eob:@"
+    runtime.enable(options, hooks)
+    runtime.flush("test")
+    -- Documented limit: the top-anchored glyph is ambiguous-width, so ambiwidth=double is refused
+    -- while that header exists; disable multiline, switch, then enable again.
+    local ok, err = pcall(function() vim.go.ambiwidth = "double" end)
+    assert.is_false(ok)
+    assert.matches("E835", err)
+    runtime.disable()
+    vim.go.ambiwidth = "double"
+    runtime.enable(options, hooks)
+    runtime.flush("test")
+    local handle = runtime.handles()[api.nvim_get_current_tabpage()]
+    assert.is_true(runtime.owns(handle.win))
+    assert.equals("", api.nvim_get_option_value("fillchars", { scope = "local", win = handle.win }))
+    vim.go.ambiwidth = "single"
+    vim.go.ambiwidth = "double"
+    assert.equals("double", vim.go.ambiwidth)
+    vim.go.ambiwidth = "single"
   end)
 end)

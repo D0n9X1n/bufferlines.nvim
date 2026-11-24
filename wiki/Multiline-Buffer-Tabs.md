@@ -32,9 +32,10 @@ for a fresh configuration:
 
 If you already configure bufferlines, replace its plugin source and merge these options
 into your existing complete configuration; do not register two copies of the plugin.
-The README preview uses a custom colorscheme and slanted separators. Add
-`separator_style = "slant"` inside `options` for that separator shape; the snippet above
-does not replace your colorscheme.
+The README preview uses the Apollo colorscheme, sloped separators and tabs of one width
+without close icons. Add `separator_style = "slope"`, `tab_size = 16`,
+`enforce_regular_tabs = true` and `show_buffer_close_icons = false` inside `options` for
+that shape; the snippet above does not replace your colorscheme.
 
 ## Enabling
 
@@ -87,6 +88,22 @@ custom areas and disable `hover.enabled` before enabling multiline.
 - The header is a reserved split above the editor, not a taller native tabline. It
   consumes its buffer rows **plus** Neovim's normal split separator/statusline space.
   `max_rows` caps the buffer rows only, not that extra space.
+- With `laststatus=3` that extra space is a window separator row. The header draws its
+  divider there with `▔`, at the top of the cell, so the gap below the last row matches
+  the gap above the first. A left sidebar's vertical separator continues into it with your
+  global `vert` character (even a literal `,`), and your other `fillchars` items are kept.
+  Junctions drawn by windows below the header (a right sidebar or a vertical split of the
+  editor) use those windows' own `fillchars`, which the plugin does not change. With
+  `ambiwidth=double`, another `laststatus`, or a `setcellwidths()` entry that widens `▔`,
+  the header keeps your global divider. The header follows later `laststatus`, `fillchars`
+  and `ambiwidth` changes in every tab.
+  `fillchars` is global-local, so Neovim starts `:set fillchars+=`, `^=` and `-=` from the
+  current window's value. Run from the header, they copy its divider into your global value;
+  use an editor window, `:setglobal`, or a plain `:set fillchars=…` (which is never affected),
+  and assign the value again to undo a copy. A `:split` of the header buffer loses the divider
+  on the next refresh.
+  While the divider is shown, `:set ambiwidth=double` fails with `E835` because `▔` has
+  ambiguous width: disable multiline, change the option, then enable it again.
 - Full-height sidebars remain outside the header area. Wrapping uses the header window's
   actual width; native sidebar offsets are not repeated there. Opening or resizing a
   sidebar keeps existing window IDs intact.
@@ -112,14 +129,14 @@ installed:
 | Key | Action |
 | --- | --- |
 | `h` / `l` | Previous / next buffer candidate (no wrap at the ends) |
-| `j` / `k` | Nearest candidate on the next / previous packed buffer row, skipping group-only rows and scrolling hidden rows into view |
+| `j` / `k`, `<Down>` / `<Up>` | Nearest candidate on the next / previous packed buffer row, skipping group-only rows and scrolling hidden rows into view |
 | `<CR>` | Run the candidate's configured left-click action in the captured editor window, falling back to another valid editor |
 | `<Esc>` | Return to that editor without selecting a buffer |
 | `x` | Run `close_command` on the candidate without activating it |
 
 **There is no `q` mapping.** The five rows above are the complete set: `h`, `j`, `k`,
-`l`, `x`, `<CR>` and `<Esc>`. In the header, `q` keeps its usual Normal-mode meaning and
-starts a macro recording. Use `<Esc>` to leave the header.
+`l`, `<Down>`, `<Up>`, `x`, `<CR>` and `<Esc>`. In the header, `q` keeps its usual
+Normal-mode meaning and starts a macro recording. Use `<Esc>` to leave the header.
 
 `x` works even with close icons hidden. It retains header focus and selects the next
 surviving neighbor (previous at the end); a refused close retains the candidate.

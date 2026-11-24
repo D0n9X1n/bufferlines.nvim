@@ -18,22 +18,22 @@ BASE16 = [
     "#1b1f27", "#e06c75", "#98c379", "#e5c07b", "#61afef", "#c678dd", "#56b6c2", "#abb2bf",
     "#5c6370", "#ef8a92", "#b0d99a", "#f0d197", "#82c0f5", "#d79ae8", "#7fcfd9", "#ffffff",
 ]
-# Catppuccin Mocha, matching the scene colorscheme.
-DEFAULT_FG, DEFAULT_BG = "#cdd6f4", "#1e1e2e"
+# Apollo, matching the scene colorscheme.
+DEFAULT_FG, DEFAULT_BG = "#cfbc97", "#141617"
 PAGE = """<!doctype html><html><head><meta charset="utf-8"><style>
 body{margin:0;background:transparent}
 #shot{display:inline-block;padding:36px 44px 44px;
-  background:linear-gradient(135deg,#89b4fa 0%%,#cba6f7 55%%,#f5c2e7 100%%)}
+  background:linear-gradient(135deg,#2f5f61 0%%,#83a598 48%%,#d3869b 100%%)}
 .win{border-radius:12px;overflow:hidden;background:%(bg)s;
-  box-shadow:0 22px 50px rgba(17,17,27,.45),0 0 0 1px rgba(255,255,255,.08)}
-.bar{position:relative;height:34px;background:#181825;display:flex;align-items:center;padding:0 14px;gap:8px}
+  box-shadow:0 24px 56px rgba(10,12,12,.55),0 0 0 1px rgba(251,241,199,.08)}
+.bar{position:relative;height:34px;background:#1d2021;display:flex;align-items:center;padding:0 14px;gap:8px}
 .bar i{width:12px;height:12px;border-radius:50%%;display:block}
-.bar span{position:absolute;left:0;right:0;text-align:center;color:#a6adc8;
+.bar span{position:absolute;left:0;right:0;text-align:center;color:#928374;
   font:500 13px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
 .g{display:inline-block;width:1ch;text-align:center;overflow:visible;font-style:normal}
 pre{font:15px/1.3 "FiraCode Nerd Font Mono","Symbols Nerd Font Mono",monospace;font-variant-ligatures:none;margin:0;padding:6px 8px 8px;color:%(fg)s;background:%(bg)s}
 </style></head><body><div id="shot"><div class="win"><div class="bar">
-<i style="background:#f38ba8"></i><i style="background:#f9e2af"></i><i style="background:#a6e3a1"></i>
+<i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i>
 <span>%(title)s</span></div><pre>%(body)s</pre></div></div></body></html>
 """
 

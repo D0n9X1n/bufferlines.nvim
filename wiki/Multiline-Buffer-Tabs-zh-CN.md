@@ -29,8 +29,9 @@
 ```
 
 已有 bufferlines 配置时，请替换插件来源，并将这些选项合入现有的完整配置；不要同时注册两份
-插件。README 预览使用了自定义配色和斜切分隔符。在 `options` 中加入
-`separator_style = "slant"` 可使用该分隔符形状；上面的示例不会替换你的配色方案。
+插件。README 预览使用了 Apollo 配色、斜坡分隔符，以及等宽且不带关闭图标的标签。在
+`options` 中加入 `separator_style = "slope"`、`tab_size = 16`、`enforce_regular_tabs = true`
+与 `show_buffer_close_icons = false` 可得到该外观；上面的示例不会替换你的配色方案。
 
 ## 启用
 
@@ -80,6 +81,18 @@ bufferlines.setup(single_row)
 - header 是编辑区上方的一个预留分割窗口，而不是更高的原生 tabline。它会占用自身的 buffer
   行数，**外加** Neovim 常规的分割分隔线／状态栏空间。`max_rows` 仅限制 buffer 行数，不包含
   这部分额外空间。
+- 在 `laststatus=3` 下，这部分额外空间是一行窗口分隔线。header 在该行用 `▔` 绘制分隔线，
+  位于单元格顶部，因此最后一行下方的间距与第一行上方的间距相同。左侧侧边栏的竖直分隔线会以
+  你的全局 `vert` 字符（包括字面量 `,`）延续到这条线上，你的其他 `fillchars` 项保持不变。
+  由 header 下方窗口绘制的交接点（右侧侧边栏或编辑区的竖直分割）使用这些窗口自己的
+  `fillchars`，插件不会修改它们。在 `ambiwidth=double`、其他 `laststatus` 取值，或
+  `setcellwidths()` 加宽了 `▔` 时，header 保留你的全局分隔线。header 会在所有标签页中跟随
+  之后对 `laststatus`、`fillchars` 与 `ambiwidth` 的修改。`fillchars` 是全局-局部选项，因此
+  Neovim 会以当前窗口的值为起点执行 `:set fillchars+=`、`^=` 与 `-=`。在 header 中执行时，它们会
+  把 header 的分隔线复制到你的全局值中；请在编辑窗口中执行、使用 `:setglobal`，或使用不受影响的
+  普通赋值 `:set fillchars=…`，再次赋值即可撤销复制。对 header buffer 执行 `:split` 得到的窗口
+  会在下一次刷新时去掉该分隔线。显示该分隔线期间，由于 `▔` 是宽度不明确的字符，
+  `:set ambiwidth=double` 会报 `E835` 失败：请先停用多行模式，修改该选项，然后重新启用。
 - 全高侧边栏位于 header 区域之外。换行按 header 窗口的实际宽度计算；原生的侧边栏偏移不会在
   此重复。打开或调整侧边栏不会改变已有的窗口 ID。
 - 编辑区内的终端分割窗口移动到文件窗口旁边或上方后，仍位于共享 header 下方。终端的布局
@@ -101,13 +114,14 @@ header 的 scratch buffer 中，不会安装任何全局映射：
 | 按键 | 操作 |
 | --- | --- |
 | `h` / `l` | 上一个／下一个候选 buffer（到两端不循环） |
-| `j` / `k` | 下一／上一个已排布 buffer 行上最近的候选项，跳过仅含分组的行，并将隐藏行滚动到可见范围 |
+| `j` / `k`、`<Down>` / `<Up>` | 下一／上一个已排布 buffer 行上最近的候选项，跳过仅含分组的行，并将隐藏行滚动到可见范围 |
 | `<CR>` | 在记住的编辑窗口中执行该候选项配置的左键操作；若该窗口不可用则回退到另一个有效编辑窗口 |
 | `<Esc>` | 返回该编辑窗口，不选择 buffer |
 | `x` | 对候选项执行 `close_command`，但不激活它 |
 
-**不存在 `q` 映射。** 上表即完整集合：`h`、`j`、`k`、`l`、`x`、`<CR>` 与 `<Esc>`。在 header
-中，`q` 保持其通常的 Normal 模式含义，会开始录制宏。请使用 `<Esc>` 离开 header。
+**不存在 `q` 映射。** 上表即完整集合：`h`、`j`、`k`、`l`、`<Down>`、`<Up>`、`x`、`<CR>` 与
+`<Esc>`。在 header 中，`q` 保持其通常的 Normal 模式含义，会开始录制宏。请使用 `<Esc>` 离开
+header。
 
 即使隐藏了关闭图标，`x` 依然有效。它会保持 header 焦点，并选中下一个仍存在的相邻项（位于末尾
 时选择前一项）；若关闭被拒绝，则保留原候选项。请配置非强制的 `close_command` 以保护未保存的
