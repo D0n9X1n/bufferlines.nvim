@@ -287,17 +287,21 @@ end
 
 local quiet
 ---Run the pending window-local 'fillchars' write (called under :noautocmd).
-function M._write() api.nvim_set_option_value("fillchars", quiet.value, { scope = "local", win = quiet.win }) end
+function M._write()
+  -- Caught here: under :silent! a failed inner command does not reach the caller as an error.
+  quiet.ok = pcall(api.nvim_set_option_value, "fillchars", quiet.value, { scope = "local", win = quiet.win })
+end
 
 -- The divider is the plugin's own drawing: writing it runs no user OptionSet handler, which could
 -- otherwise close windows or change the options the divider depends on in the middle of a refresh.
 local function set_fillchars(win, value)
-  quiet = { win = win, value = value }
-  local ok = pcall(api.nvim_cmd, {
+  quiet = { win = win, value = value, ok = false }
+  pcall(api.nvim_cmd, {
     cmd = "lua",
     args = { "require('bufferlines.multiline.runtime')._write()" },
     mods = { noautocmd = true },
   }, {})
+  local ok = quiet.ok
   quiet = nil
   return ok
 end

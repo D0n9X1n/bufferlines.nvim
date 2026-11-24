@@ -1867,6 +1867,24 @@ describe("Multiline runtime", function()
     assert.equals(3, child_lua("return vim.go.laststatus"))
   end)
 
+  it("falls back to the next divider candidate inside :silent!", function()
+    start_child()
+    child_lua([=[
+      vim.cmd("set laststatus=2 fillchars=eob:@,")
+      runtime.flush("test")
+      vim.v.errmsg = ""
+      -- :silent! makes a failed inner write look like success to the caller; the trailing
+      -- separator rejects the first candidate, so the second one must still be applied.
+      vim.cmd("noautocmd set laststatus=3 | silent! lua require('bufferlines.multiline.runtime').flush('test')")
+    ]=])
+    local h = child_lua("return runtime.handles()[tab].win")
+    assert.equals(
+      "eob:@,horiz:▔,vertright:│,verthoriz:│",
+      child_lua("return vim.api.nvim_get_option_value('fillchars', { scope = 'local', win = ... })", { h })
+    )
+    assert.equals("", child_lua("return vim.v.errmsg"))
+  end)
+
   it("joins a sidebar with Neovim's fallback vert when the global value has none", function()
     vim.o.laststatus = 3
     vim.go.fillchars = ""
