@@ -83,8 +83,8 @@ enter the header. Only the header scratch buffer has these Normal-mode maps:
     h / l       Previous / next buffer candidate (no wrap at the ends).
     j / k       Nearest candidate on the next / previous packed buffer row.
                 Skip group-only rows and scroll hidden rows into view.
-    <Down> / <Up>
-                Same as j / k.
+    <Left> / <Down> / <Up> / <Right>
+                Same as h / j / k / l.
     <CR>        Run the candidate's configured left-click action in the captured
                 ordinary editor window, falling back to another valid editor.
     <Esc>       Return to that editor without selecting a buffer.
@@ -103,9 +103,10 @@ resize/repacking; removed or hidden candidates reconcile to the active buffer
 header focus and does not select a buffer. No global mappings are installed.
 
 There is no `q` mapping in the header. The maps above are the complete set:
-h, j, k, l, <Down>, <Up>, x, <CR> and <Esc>. In the header `q` keeps its usual
-Normal-mode meaning and starts a macro recording, so use <Esc> to leave the
-header.
+h, j, k, l, <Left>, <Down>, <Up>, <Right>, x, <CR> and <Esc>. While the header
+is focused these maps take precedence over your global maps for the same keys.
+In the header `q` keeps its usual Normal-mode meaning and starts a macro
+recording, so use <Esc> to leave the header.
 The header stays in its editor region when a full-height sidebar opens later.
 
 Restoring single-row mode ~

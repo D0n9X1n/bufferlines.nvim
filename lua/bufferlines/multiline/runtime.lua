@@ -457,8 +457,8 @@ end
 local function allocate(handle, height)
   handle.buf = api.nvim_create_buf(false, true)
   vim.b[handle.buf][marker] = namespace
-  local aliases = { ["<Down>"] = "j", ["<Up>"] = "k" }
-  for _, key in ipairs({ "h", "j", "k", "l", "x", "<CR>", "<Esc>", "<Down>", "<Up>" }) do
+  local aliases = { ["<Left>"] = "h", ["<Down>"] = "j", ["<Up>"] = "k", ["<Right>"] = "l" }
+  for _, key in ipairs({ "h", "j", "k", "l", "x", "<CR>", "<Esc>", "<Left>", "<Down>", "<Up>", "<Right>" }) do
     vim.keymap.set(
       "n",
       key,

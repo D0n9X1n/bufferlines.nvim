@@ -516,10 +516,33 @@ describe("Multiline runtime", function()
     )
   end)
 
-  it("moves between rows with <Down>/<Up> exactly like j/k", function()
+  it("moves with <Left>/<Right>/<Down>/<Up> exactly like h/l/j/k", function()
     local initial = real_layout(20)
     local ids = child_lua("return ids")
-    input("<C-w>kl")
+    -- A user's own global arrow maps (for example buffer cycling), installed before setup: they run
+    -- in an editor and after leaving the header, never while the header is focused.
+    child_lua([=[
+      runtime.disable()
+      cycled = 0
+      for _, key in ipairs({ "<Left>", "<Right>", "<Up>", "<Down>" }) do
+        vim.keymap.set("n", key, function() cycled = cycled + 1 end)
+      end
+      runtime.enable(options, hooks)
+      runtime.flush("test")
+    ]=])
+    input("<Left><Right><Up><Down>")
+    assert.equals(4, child_lua("return cycled"))
+    child_lua("cycled = 0")
+    local editor_buf = child_lua("return snapshot().editor_buf")
+    input("<C-w>k")
+    assert.equals(ids[1], child_lua("return snapshot().candidate"))
+    input("<Right>")
+    assert.equals(ids[2], child_lua("return snapshot().candidate"))
+    input("<Left>")
+    assert.equals(ids[1], child_lua("return snapshot().candidate"))
+    input("<Left>") -- already the first candidate: no wrap, same as h
+    assert.equals(ids[1], child_lua("return snapshot().candidate"))
+    input("<Right>")
     assert.equals(ids[2], child_lua("return snapshot().candidate"))
     input("<Down>")
     assert.equals(ids[4], child_lua("return snapshot().candidate"))
@@ -534,25 +557,97 @@ describe("Multiline runtime", function()
     assert.equals(by_letters.candidate, by_arrows.candidate)
     assert.equals(by_letters.first, by_arrows.first)
     assert.is_true(by_arrows.first > 1)
-    assert.equals(initial.handle.win, by_arrows.win)
+    assert.equals(child_lua("return header_win()"), by_arrows.win)
+    input(string.rep("<Right>", 25)) -- past the last candidate: no wrap, same as l
+    assert.equals(ids[20], child_lua("return snapshot().candidate"))
+    input("l")
+    assert.equals(ids[20], child_lua("return snapshot().candidate"))
     assert.equals(0, child_lua("return #seen"))
+    assert.equals(0, child_lua("return cycled"))
+    assert.equals(editor_buf, child_lua("return snapshot().editor_buf"))
     input("<Esc>")
     assert.equals(initial.editor, child_lua("return snapshot().win"))
-    assert.same(
-      {},
-      child_lua(
-        "return vim.tbl_filter(function(m) return m.lhs == '<Up>' or m.lhs == '<Down>' end, vim.api.nvim_get_keymap('n'))"
-      )
-    )
+    -- Outside the header the user's own maps keep working; the plugin installs no global maps.
+    input("<Left><Right><Up><Down>")
+    assert.equals(4, child_lua("return cycled"))
     local flags = child_lua([=[
       local out = {}
       local buf = runtime.handles()[tab].buf
       for _, m in ipairs(vim.api.nvim_buf_get_keymap(buf, "n")) do
-        if m.lhs == "<Up>" or m.lhs == "<Down>" then out[m.lhs] = { m.buffer == buf, m.nowait } end
+        if vim.tbl_contains({ "<Left>", "<Right>", "<Up>", "<Down>" }, m.lhs) then
+          out[m.lhs] = { m.buffer == buf, m.nowait, m.silent }
+        end
       end
       return out
     ]=])
-    assert.same({ ["<Up>"] = { true, 1 }, ["<Down>"] = { true, 1 } }, flags)
+    assert.same({
+      ["<Left>"] = { true, 1, 1 },
+      ["<Right>"] = { true, 1, 1 },
+      ["<Up>"] = { true, 1, 1 },
+      ["<Down>"] = { true, 1, 1 },
+    }, flags)
+  end)
+
+  it("keeps a user's global arrow maps through the public setup and installs none of its own", function()
+    local deps = os.getenv("NVIM_TEST_DEPS") or (root .. "/.tests")
+    local function fresh(with_user_maps)
+      child = vim.fn.jobstart(
+        { vim.v.progpath, "--embed", "--headless", "-u", "NONE", "-i", "NONE", "-n" },
+        { rpc = true }
+      )
+      assert.is_true(child > 0)
+      child_lua(
+        [=[
+        local root, deps, with_user_maps = ...
+        vim.opt.runtimepath:prepend(root)
+        vim.opt.runtimepath:append(deps .. "/nvim-web-devicons")
+        vim.o.laststatus = 3
+        calls = 0
+        if with_user_maps then
+          for _, key in ipairs({ "<Left>", "<Right>", "<Up>", "<Down>" }) do
+            vim.keymap.set("n", key, function() calls = calls + 1 end)
+          end
+        end
+        for i = 1, 6 do vim.cmd("edit keyboard-" .. i .. ".lua") end
+        last = vim.api.nvim_get_current_buf()
+        require("bufferlines").setup({ options = { multiline = { enabled = true, max_rows = 3 }, show_buffer_icons = false } })
+        runtime = require("bufferlines.multiline.runtime")
+        runtime.flush("test")
+        function candidate() return runtime.handles()[vim.api.nvim_get_current_tabpage()].candidate end
+        function global_arrows()
+          local found = {}
+          for _, m in ipairs(vim.api.nvim_get_keymap("n")) do
+            if vim.tbl_contains({ "<Left>", "<Right>", "<Up>", "<Down>" }, m.lhs) then found[#found + 1] = m.lhs end
+          end
+          return found
+        end
+      ]=],
+        { root, deps, with_user_maps }
+      )
+    end
+    -- Without user maps, setup installs no global arrow maps.
+    fresh(false)
+    assert.same({}, child_lua("return global_arrows()"))
+    vim.fn.jobstop(child)
+    -- With user maps installed before the first setup: they survive and run outside the header only.
+    fresh(true)
+    assert.equals(4, #child_lua("return global_arrows()"))
+    input("<Left><Right><Up><Down>")
+    assert.equals(4, child_lua("return calls"))
+    input("<C-w>k")
+    assert.is_true(child_lua("return runtime.owns(vim.api.nvim_get_current_win())"))
+    local last = child_lua("return last")
+    assert.equals(last, child_lua("return candidate()"))
+    input("<Right>") -- the active buffer is the last candidate: no wrap
+    assert.equals(last, child_lua("return candidate()"))
+    input("<Left>")
+    local previous = child_lua("return candidate()")
+    assert.are_not.equals(last, previous)
+    input("<Right>")
+    assert.equals(last, child_lua("return candidate()"))
+    assert.equals(4, child_lua("return calls"))
+    input("<Esc><Left><Right><Up><Down>")
+    assert.equals(8, child_lua("return calls"))
   end)
 
   it("matches j/k step by step with <Down>/<Up> across scrolled viewports", function()
@@ -573,6 +668,27 @@ describe("Multiline runtime", function()
     assert.is_true(arrows[10][2] > 1)
     assert.is_true(arrows[11][2] > 1)
     assert.equals(1, arrows[20][2])
+  end)
+
+  it("matches h/l/j/k step by step with the arrow keys across rows, ends and scrolling", function()
+    local letters = { "l", "l", "j", "l", "j", "j", "h", "h", "h", "h", "j", "j", "k", "l", "k", "k", "k", "k", "h" }
+    local arrows = { h = "<Left>", l = "<Right>", j = "<Down>", k = "<Up>" }
+    local function drive(map)
+      real_layout(20)
+      input("<C-w>k")
+      local states = {}
+      for _, key in ipairs(letters) do
+        input(map and arrows[key] or key)
+        states[#states + 1] = child_lua("local s = snapshot(); return { s.candidate, s.first }")
+      end
+      vim.fn.jobstop(child)
+      child = nil
+      return states
+    end
+    local by_arrows, by_letters = drive(true), drive(false)
+    assert.same(by_letters, by_arrows)
+    local scrolled = vim.tbl_filter(function(s) return s[2] > 1 end, by_arrows)
+    assert.is_true(#scrolled > 0)
   end)
 
   it("navigates with the real plugin frame and configured click callback", function()

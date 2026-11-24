@@ -11,7 +11,7 @@ vim.o.wrap = false
 -- The focused multiline header shows its keys instead of a scratch buffer name.
 function _G.preview_statusline()
   if vim.bo.filetype == "bufferlines" then
-    return " HEADER  h j k l / ↑ ↓ move  <CR> open  x close  <Esc> back "
+    return " HEADER  h j k l / ← ↓ ↑ → move  <CR> open  x close  <Esc> back "
   end
   return " %f %m%= %{&filetype}  %l:%c "
 end
