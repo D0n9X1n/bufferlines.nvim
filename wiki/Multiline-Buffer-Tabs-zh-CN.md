@@ -82,12 +82,12 @@ bufferlines.setup(single_row)
   这部分额外空间。
 - 在 `laststatus=3` 下，这部分额外空间是一行窗口分隔线。header 在该行用 `▔` 绘制分隔线，
   位于单元格顶部，因此最后一行下方的间距与第一行上方的间距相同。左侧侧边栏的竖直分隔线会以
-  你的全局 `vert` 字符（包括字面量 `,`）延续到这条线上，你的其他 `fillchars` 项保持不变。由 header 下方窗口
-  绘制的交接点（右侧侧边栏或编辑区的竖直分割）保留你的全局字符。在 `ambiwidth=double`、其他
-  `laststatus` 取值，或 `setcellwidths()` 加宽了 `▔` 时，header 保留你的全局分隔线。header 会在
-  下一次刷新时（在所有标签页中）跟随之后对 `laststatus`、`fillchars` 与 `ambiwidth` 的修改。显示该分隔线期间，
-  由于 `▔` 是宽度不明确的字符，`:set ambiwidth=double` 会报 `E835` 失败：请先停用多行模式，
-  修改该选项，然后重新启用。
+  你的全局 `vert` 字符（包括字面量 `,`）延续到这条线上，你的其他 `fillchars` 项保持不变。
+  由 header 下方窗口绘制的交接点（右侧侧边栏或编辑区的竖直分割）保留你的全局字符。在
+  `ambiwidth=double`、其他 `laststatus` 取值，或 `setcellwidths()` 加宽了 `▔` 时，header
+  保留你的全局分隔线。header 会在所有标签页中跟随之后对 `laststatus`、`fillchars` 与
+  `ambiwidth` 的修改。显示该分隔线期间，由于 `▔` 是宽度不明确的字符，
+  `:set ambiwidth=double` 会报 `E835` 失败：请先停用多行模式，修改该选项，然后重新启用。
 - 全高侧边栏位于 header 区域之外。换行按 header 窗口的实际宽度计算；原生的侧边栏偏移不会在
   此重复。打开或调整侧边栏不会改变已有的窗口 ID。
 - 编辑区内的终端分割窗口移动到文件窗口旁边或上方后，仍位于共享 header 下方。终端的布局

@@ -90,13 +90,13 @@ custom areas and disable `hover.enabled` before enabling multiline.
 - With `laststatus=3` that extra space is a window separator row. The header draws its
   divider there with `▔`, at the top of the cell, so the gap below the last row matches
   the gap above the first. A left sidebar's vertical separator continues into it with your
-  global `vert` character (even a literal `,`), and your other `fillchars` items are kept. Junctions drawn by
-  windows below the header (a right sidebar or a vertical split of the editor) keep your
-  global glyphs. With `ambiwidth=double`, another `laststatus`, or a `setcellwidths()`
-  entry that widens `▔`, the header keeps your global divider. The header follows later
-  `laststatus`, `fillchars` and `ambiwidth` changes on its next refresh, in every tab. While the divider
-  is shown, `:set ambiwidth=double` fails with `E835` because `▔` has ambiguous width:
-  disable multiline, change the option, then enable it again.
+  global `vert` character (even a literal `,`), and your other `fillchars` items are kept.
+  Junctions drawn by windows below the header (a right sidebar or a vertical split of the
+  editor) keep your global glyphs. With `ambiwidth=double`, another `laststatus`, or a
+  `setcellwidths()` entry that widens `▔`, the header keeps your global divider. The
+  header follows later `laststatus`, `fillchars` and `ambiwidth` changes in every tab.
+  While the divider is shown, `:set ambiwidth=double` fails with `E835` because `▔` has
+  ambiguous width: disable multiline, change the option, then enable it again.
 - Full-height sidebars remain outside the header area. Wrapping uses the header window's
   actual width; native sidebar offsets are not repeated there. Opening or resizing a
   sidebar keeps existing window IDs intact.

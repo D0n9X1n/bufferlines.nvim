@@ -1641,6 +1641,9 @@ describe("Multiline runtime", function()
     assert.equals("vert:A,vert:,,eob:@,horiz:▔,vertright:,,verthoriz:,", local_fcs())
     vim.go.fillchars = "eob:@,"
     assert.equals("eob:@,horiz:▔,vertright:│,verthoriz:│", local_fcs())
+    -- Items are kept verbatim, including a combining mark and later items.
+    vim.go.fillchars = "eob:a\204\129,vert:X,foldinner:x"
+    assert.equals("eob:a\204\129,vert:X,foldinner:x,horiz:▔,vertright:X,verthoriz:X", local_fcs())
   end)
 
   it("undecorates every tab's header so ambiwidth can change", function()
@@ -1681,6 +1684,29 @@ describe("Multiline runtime", function()
     api.nvim_set_option_value = set
     vim.fn.setcellwidths({})
     assert(ok, err)
+  end)
+
+  it("refreshes the divider when laststatus, fillchars or ambiwidth change at runtime", function()
+    -- A started child: OptionSet does not fire while the test runner itself is still starting up.
+    start_child()
+    child_lua([=[
+      vim.cmd("set laststatus=3 fillchars=vert:X")
+      runtime.flush("test")
+      function local_fcs()
+        local h = runtime.handles()[vim.api.nvim_get_current_tabpage()]
+        return vim.api.nvim_get_option_value("fillchars", { scope = "local", win = h.win })
+      end
+    ]=])
+    local function local_fcs() return child_lua("return local_fcs()") end
+    assert.equals("vert:X,horiz:▔,vertright:X,verthoriz:X", local_fcs())
+    -- No manual flush: real option changes alone must refresh the header (window sizes do not change).
+    child_lua("vim.cmd('set fillchars=vert:Y')")
+    settle(function() return local_fcs() == "vert:Y,horiz:▔,vertright:Y,verthoriz:Y" end)
+    child_lua("vim.cmd('set laststatus=2')")
+    settle(function() return local_fcs() == "" end)
+    assert.equals("double", child_lua("vim.cmd('set ambiwidth=double'); return vim.go.ambiwidth"))
+    child_lua("vim.cmd('set ambiwidth=single laststatus=3')")
+    settle(function() return local_fcs() == "vert:Y,horiz:▔,vertright:Y,verthoriz:Y" end)
   end)
 
   it("keeps the global divider when allocated under ambiwidth=double", function()

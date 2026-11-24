@@ -400,6 +400,12 @@ function M.enable(config, callbacks)
       M.request(event.event)
     end,
   })
+  -- The header divider depends on these; changing them resizes nothing, so ask for a refresh.
+  api.nvim_create_autocmd("OptionSet", {
+    group = group,
+    pattern = { "laststatus", "fillchars", "ambiwidth" },
+    callback = function() M.request("OptionSet") end,
+  })
   api.nvim_create_autocmd("WinEnter", {
     group = group,
     callback = function()
@@ -470,26 +476,22 @@ end
 -- separator continues into it with the global vert character. The glyphs have ambiguous width, so
 -- under ambiwidth=double (or any other layout) the header keeps the global divider.
 local function decorate(handle)
-  local value = ""
+  local global, candidates = vim.go.fillchars, { "" }
   if vim.go.laststatus == 3 and vim.go.ambiwidth == "single" then
-    -- Each item's value is exactly one character, which may itself be a comma.
-    local global, vert, items, pos = vim.go.fillchars, "│", {}, 1
-    while pos <= #global do
-      local item, key, char, next_pos = global:match("^((%a+):([%z\1-\127\194-\244][\128-\191]*))()", pos)
-      if not item then break end
-      items[#items + 1] = item
-      if key == "vert" then vert = char end
-      pos = next_pos + 1
+    -- The last vert item follows a separator; its one-character value may itself be a comma.
+    local vert = "│"
+    for char in ("," .. global):gmatch(",vert:([%z\1-\127\194-\244][\128-\191]*)") do
+      vert = char
     end
-    items[#items + 1] = "horiz:▔,vertright:" .. vert .. ",verthoriz:" .. vert
-    value = table.concat(items, ",")
+    local divider = "horiz:▔,vertright:" .. vert .. ",verthoriz:" .. vert
+    -- Append to the user's items verbatim; Neovim validates. The second form follows a trailing
+    -- separator, and "" keeps the global divider when a glyph is rejected (e.g. setcellwidths()).
+    candidates = { global == "" and divider or global .. "," .. divider, global .. divider, "" }
   end
-  local scope = { scope = "local", win = handle.win }
-  if handle.divider == value then return end
-  handle.divider = value
-  -- A glyph the user made wider (setcellwidths()) is rejected: keep the global divider instead.
-  if not pcall(api.nvim_set_option_value, "fillchars", value, scope) then
-    api.nvim_set_option_value("fillchars", "", scope)
+  if handle.divider == candidates[1] then return end
+  handle.divider = candidates[1]
+  for _, value in ipairs(candidates) do
+    if pcall(api.nvim_set_option_value, "fillchars", value, { scope = "local", win = handle.win }) then return end
   end
 end
 
