@@ -1863,6 +1863,24 @@ describe("Multiline runtime", function()
     end)
   end)
 
+  it("re-reads the divider options when a handler run by its own write changes them", function()
+    start_child()
+    child_lua([=[
+      vim.cmd("set laststatus=2 fillchars=vert:X")
+      runtime.flush("test")
+      -- Neovim emits no nested OptionSet for this change, so only decorate() itself can notice it.
+      vim.cmd("autocmd OptionSet fillchars ++once set laststatus=2")
+      vim.cmd("set laststatus=3")
+    ]=])
+    sync_child()
+    settle(function()
+      local h = child_lua("return runtime.handles()[tab].win")
+      return child_lua("return vim.go.laststatus") == 2
+        and child_lua("return vim.api.nvim_get_option_value('fillchars', { scope = 'local', win = ... })", { h }) == ""
+    end)
+    assert.equals("double", child_lua("vim.cmd('set ambiwidth=double'); return vim.go.ambiwidth"))
+  end)
+
   it("joins a sidebar with Neovim's fallback vert when the global value has none", function()
     vim.o.laststatus = 3
     vim.go.fillchars = ""

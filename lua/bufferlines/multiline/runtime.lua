@@ -486,8 +486,9 @@ end
 -- Under laststatus=3 the header's own 'fillchars' draws the divider below it. '▔' sits at the top of
 -- that cell, so the gap under the last row matches the one above the first, and a left sidebar's
 -- separator continues into it with the global vert character. The glyphs have ambiguous width, so
--- under ambiwidth=double (or any other layout) the header keeps the global divider.
-local function decorate(handle)
+-- under ambiwidth=double (or any other layout) the header keeps the global divider. These are the
+-- local values to try, in order.
+local function divider_values()
   local global, candidates = vim.go.fillchars, { "" }
   if vim.go.laststatus == 3 and vim.go.ambiwidth == "single" then
     -- The junction repeats the raw text of the last vert item (escapes and combining marks kept):
@@ -511,12 +512,28 @@ local function decorate(handle)
     end
     candidates[#candidates + 1] = ""
   end
-  -- Compare with the actual local value each time: a user :set may clear it, and a rejected glyph
-  -- may become valid later. Rejected candidates write nothing, so an unchanged header costs no write.
+  return candidates
+end
+
+local function decorate(handle)
   local scope = { scope = "local", win = handle.win }
-  local current = api.nvim_get_option_value("fillchars", scope)
-  for _, value in ipairs(candidates) do
-    if value == current or pcall(api.nvim_set_option_value, "fillchars", value, scope) then return end
+  -- A user OptionSet handler run by the write may change what the divider depends on, and Neovim
+  -- emits no nested OptionSet for it: re-read those options until they stay put (bounded).
+  for _ = 1, 3 do
+    local inputs = { vim.go.laststatus, vim.go.ambiwidth, vim.go.fillchars }
+    -- Compare with the actual local value each time: a user :set may clear it, and a rejected
+    -- glyph may become valid later. Rejected candidates write nothing, so an unchanged header
+    -- costs no write.
+    local current = api.nvim_get_option_value("fillchars", scope)
+    for _, value in ipairs(divider_values()) do
+      if value == current or pcall(api.nvim_set_option_value, "fillchars", value, scope) then break end
+    end
+    if
+      not api.nvim_win_is_valid(handle.win)
+      or vim.deep_equal(inputs, { vim.go.laststatus, vim.go.ambiwidth, vim.go.fillchars })
+    then
+      return
+    end
   end
 end
 
@@ -723,6 +740,7 @@ function M.flush(reason)
   end
   local tab = api.nvim_get_current_tabpage()
   local ok, err = pcall(render, reason)
+  sweep()
   -- Every tab's header, even when this render failed: a stale divider elsewhere would still block a
   -- global ambiwidth change.
   for _, handle in pairs(handles) do
@@ -733,7 +751,6 @@ function M.flush(reason)
       end
     end
   end
-  sweep()
   guard = false
   if not ok then unavailable(tab, err) end
 end
