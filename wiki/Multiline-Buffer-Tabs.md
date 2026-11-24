@@ -93,13 +93,15 @@ custom areas and disable `hover.enabled` before enabling multiline.
   the gap above the first. A left sidebar's vertical separator continues into it with your
   global `vert` character (even a literal `,`), and your other `fillchars` items are kept.
   Junctions drawn by windows below the header (a right sidebar or a vertical split of the
-  editor) use those windows' own `fillchars`, which the plugin does not change. With `ambiwidth=double`, another `laststatus`, or a
-  `setcellwidths()` entry that widens `▔`, the header keeps your global divider. The
-  header follows later `laststatus`, `fillchars` and `ambiwidth` changes in every tab.
-  A `:set fillchars` that adds, prepends or removes items while the header is the current
-  window (or a split copied from it) applies to your global value, without the header's
-  glyphs. Removing one of the header's own items leaves your value unchanged. Use `:setglobal`
-  or an editor window for other assignments to `horiz`, `vertright` or `verthoriz`.
+  editor) use those windows' own `fillchars`, which the plugin does not change. With
+  `ambiwidth=double`, another `laststatus`, or a `setcellwidths()` entry that widens `▔`,
+  the header keeps your global divider. The header follows later `laststatus`, `fillchars`
+  and `ambiwidth` changes in every tab.
+  `fillchars` is global-local, so Neovim starts `:set fillchars+=`, `^=` and `-=` from the
+  current window's value. Run from the header, they copy its divider into your global value;
+  use an editor window, `:setglobal`, or a plain `:set fillchars=…` (which is never affected),
+  and assign the value again to undo a copy. A `:split` of the header buffer loses the divider
+  on the next refresh.
   While the divider is shown, `:set ambiwidth=double` fails with `E835` because `▔` has
   ambiguous width: disable multiline, change the option, then enable it again.
 - Full-height sidebars remain outside the header area. Wrapping uses the header window's
