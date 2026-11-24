@@ -1833,7 +1833,7 @@ describe("Multiline runtime", function()
     assert.equals("vert:X", child_lua("return vim.go.fillchars"))
   end)
 
-  it("keeps refreshing when clearing one split copy closes another", function()
+  it("runs no user OptionSet handler while it writes divider values", function()
     start_child()
     child_lua([=[
       vim.cmd("set laststatus=3 fillchars=vert:X")
@@ -1843,42 +1843,28 @@ describe("Multiline runtime", function()
       vim.cmd("split")
       vim.api.nvim_set_current_win(header)
       vim.cmd("split")
-      local copies = {}
-      for _, win in ipairs(vim.api.nvim_list_wins()) do
-        if win ~= header and vim.api.nvim_win_get_buf(win) == vim.api.nvim_win_get_buf(header) then
-          copies[#copies + 1] = win
-        end
-      end
-      -- Clearing the first copy runs a user handler that closes the second one.
-      vim.api.nvim_create_autocmd("OptionSet", { pattern = "fillchars", once = true, callback = function()
-        pcall(vim.api.nvim_win_close, copies[2], true)
-      end })
       vim.api.nvim_set_current_win(editor)
+      -- A handler that would undo or race the plugin's writes, if they ran user autocommands.
+      fired = 0
+      vim.api.nvim_create_autocmd("OptionSet", { pattern = "fillchars", callback = function()
+        fired = fired + 1
+        vim.cmd("let &l:fillchars = v:option_old | set laststatus=2")
+      end })
+      function divided()
+        local n = 0
+        for _, win in ipairs(vim.api.nvim_list_wins()) do
+          if vim.api.nvim_get_option_value("fillchars", { scope = "local", win = win }):find("▔") then n = n + 1 end
+        end
+        return n
+      end
     ]=])
-    sync_child()
+    -- Clearing both split copies and the header, then decorating it again: no handler runs.
     child_lua("vim.cmd('set laststatus=2')")
-    settle(function()
-      local h = child_lua("return runtime.handles()[tab].win")
-      return child_lua("return vim.api.nvim_get_option_value('fillchars', { scope = 'local', win = ... })", { h }) == ""
-    end)
-  end)
-
-  it("re-reads the divider options when a handler run by its own write changes them", function()
-    start_child()
-    child_lua([=[
-      vim.cmd("set laststatus=2 fillchars=vert:X")
-      runtime.flush("test")
-      -- Neovim emits no nested OptionSet for this change, so only decorate() itself can notice it.
-      vim.cmd("autocmd OptionSet fillchars ++once set laststatus=2")
-      vim.cmd("set laststatus=3")
-    ]=])
-    sync_child()
-    settle(function()
-      local h = child_lua("return runtime.handles()[tab].win")
-      return child_lua("return vim.go.laststatus") == 2
-        and child_lua("return vim.api.nvim_get_option_value('fillchars', { scope = 'local', win = ... })", { h }) == ""
-    end)
-    assert.equals("double", child_lua("vim.cmd('set ambiwidth=double'); return vim.go.ambiwidth"))
+    settle(function() return child_lua("return divided()") == 0 end)
+    child_lua("vim.cmd('set laststatus=3')")
+    settle(function() return child_lua("return divided()") == 1 end)
+    assert.equals(0, child_lua("return fired"))
+    assert.equals(3, child_lua("return vim.go.laststatus"))
   end)
 
   it("joins a sidebar with Neovim's fallback vert when the global value has none", function()

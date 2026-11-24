@@ -285,15 +285,28 @@ local function recover(reason)
   end)
 end
 
+local quiet
+---Run the pending window-local 'fillchars' write (called under :noautocmd).
+function M._write() api.nvim_set_option_value("fillchars", quiet.value, { scope = "local", win = quiet.win }) end
+
+-- The divider is the plugin's own drawing: writing it runs no user OptionSet handler, which could
+-- otherwise close windows or change the options the divider depends on in the middle of a refresh.
+local function set_fillchars(win, value)
+  quiet = { win = win, value = value }
+  local ok = pcall(api.nvim_cmd, {
+    cmd = "lua",
+    args = { "require('bufferlines.multiline.runtime')._write()" },
+    mods = { noautocmd = true },
+  }, {})
+  quiet = nil
+  return ok
+end
+
 -- :split in the header shows its buffer in a second window with a copy of the header's options.
--- Each write can run a user OptionSet handler that closes a later window in the list.
 local function sweep()
   for _, win in ipairs(api.nvim_list_wins()) do
-    if api.nvim_win_is_valid(win) and not M.owns(win) and vim.b[api.nvim_win_get_buf(win)][marker] == namespace then
-      local scope = { scope = "local", win = win }
-      if api.nvim_get_option_value("fillchars", scope) ~= "" then
-        pcall(api.nvim_set_option_value, "fillchars", "", scope)
-      end
+    if not M.owns(win) and vim.b[api.nvim_win_get_buf(win)][marker] == namespace then
+      if api.nvim_get_option_value("fillchars", { scope = "local", win = win }) ~= "" then set_fillchars(win, "") end
     end
   end
 end
@@ -516,24 +529,11 @@ local function divider_values()
 end
 
 local function decorate(handle)
-  local scope = { scope = "local", win = handle.win }
-  -- A user OptionSet handler run by the write may change what the divider depends on, and Neovim
-  -- emits no nested OptionSet for it: re-read those options until they stay put (bounded).
-  for _ = 1, 3 do
-    local inputs = { vim.go.laststatus, vim.go.ambiwidth, vim.go.fillchars }
-    -- Compare with the actual local value each time: a user :set may clear it, and a rejected
-    -- glyph may become valid later. Rejected candidates write nothing, so an unchanged header
-    -- costs no write.
-    local current = api.nvim_get_option_value("fillchars", scope)
-    for _, value in ipairs(divider_values()) do
-      if value == current or pcall(api.nvim_set_option_value, "fillchars", value, scope) then break end
-    end
-    if
-      not api.nvim_win_is_valid(handle.win)
-      or vim.deep_equal(inputs, { vim.go.laststatus, vim.go.ambiwidth, vim.go.fillchars })
-    then
-      return
-    end
+  -- Compare with the actual local value each time: a user :set may clear it, and a rejected glyph
+  -- may become valid later. Rejected candidates write nothing, so an unchanged header costs no write.
+  local current = api.nvim_get_option_value("fillchars", { scope = "local", win = handle.win })
+  for _, value in ipairs(divider_values()) do
+    if value == current or set_fillchars(handle.win, value) then return end
   end
 end
 
