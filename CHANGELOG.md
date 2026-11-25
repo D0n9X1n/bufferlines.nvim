@@ -3,6 +3,19 @@
 All notable changes to bufferlines.nvim are recorded here. Release notes on GitHub are
 generated from the commits between tags.
 
+## 1.1.2 - 2026-11-24
+
+### Fixed
+
+- Multiline header: with `laststatus=3` the divider below the header is Neovim's own centred
+  window separator again, drawn from your global `fillchars` and `WinSeparator` (default `─`,
+  joining a left sidebar with `├`). The top-anchored `▔` from 1.1.0 left an almost empty row
+  above the first editor line
+  ([#9](https://github.com/D0n9X1n/bufferlines.nvim/issues/9)). The plugin no longer sets a
+  window-local `fillchars`, so `:set ambiwidth=double` no longer fails with `E835` while the
+  header is shown, and `:set fillchars+=` run from the header no longer copies a divider into
+  your global value.
+
 ## 1.1.1 - 2026-11-24
 
 ### Fixed

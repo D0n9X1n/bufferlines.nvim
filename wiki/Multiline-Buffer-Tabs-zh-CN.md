@@ -81,18 +81,10 @@ bufferlines.setup(single_row)
 - header 是编辑区上方的一个预留分割窗口，而不是更高的原生 tabline。它会占用自身的 buffer
   行数，**外加** Neovim 常规的分割分隔线／状态栏空间。`max_rows` 仅限制 buffer 行数，不包含
   这部分额外空间。
-- 在 `laststatus=3` 下，这部分额外空间是一行窗口分隔线。header 在该行用 `▔` 绘制分隔线，
-  位于单元格顶部，因此最后一行下方的间距与第一行上方的间距相同。左侧侧边栏的竖直分隔线会以
-  你的全局 `vert` 字符（包括字面量 `,`）延续到这条线上，你的其他 `fillchars` 项保持不变。
-  由 header 下方窗口绘制的交接点（右侧侧边栏或编辑区的竖直分割）使用这些窗口自己的
-  `fillchars`，插件不会修改它们。在 `ambiwidth=double`、其他 `laststatus` 取值，或
-  `setcellwidths()` 加宽了 `▔` 时，header 保留你的全局分隔线。header 会在所有标签页中跟随
-  之后对 `laststatus`、`fillchars` 与 `ambiwidth` 的修改。`fillchars` 是全局-局部选项，因此
-  Neovim 会以当前窗口的值为起点执行 `:set fillchars+=`、`^=` 与 `-=`。在 header 中执行时，它们会
-  把 header 的分隔线复制到你的全局值中；请在编辑窗口中执行、使用 `:setglobal`，或使用不受影响的
-  普通赋值 `:set fillchars=…`，再次赋值即可撤销复制。对 header buffer 执行 `:split` 得到的窗口
-  会在下一次刷新时去掉该分隔线。显示该分隔线期间，由于 `▔` 是宽度不明确的字符，
-  `:set ambiwidth=double` 会报 `E835` 失败：请先停用多行模式，修改该选项，然后重新启用。
+- 在 `laststatus=3` 下，这部分额外空间是一行窗口分隔线。它是 Neovim 自己的分隔线，与其他
+  分割窗口一样使用你的全局 `fillchars` 与 `WinSeparator` 绘制，因此默认是一条居中的 `─`，
+  并以 `├` 与左侧侧边栏相接。插件不设置窗口局部的 `fillchars`，因此显示 header 时
+  `:set fillchars+=` 与 `:set ambiwidth=double` 照常生效。
 - 全高侧边栏位于 header 区域之外。换行按 header 窗口的实际宽度计算；原生的侧边栏偏移不会在
   此重复。打开或调整侧边栏不会改变已有的窗口 ID。
 - 编辑区内的终端分割窗口移动到文件窗口旁边或上方后，仍位于共享 header 下方。终端的布局
