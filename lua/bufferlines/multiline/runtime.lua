@@ -285,36 +285,6 @@ local function recover(reason)
   end)
 end
 
-local quiet
----Run the pending window-local 'fillchars' write (called under :noautocmd).
-function M._write()
-  -- Caught here: under :silent! a failed inner command does not reach the caller as an error.
-  quiet.ok = pcall(api.nvim_set_option_value, "fillchars", quiet.value, { scope = "local", win = quiet.win })
-end
-
--- The divider is the plugin's own drawing: writing it runs no user OptionSet handler, which could
--- otherwise close windows or change the options the divider depends on in the middle of a refresh.
-local function set_fillchars(win, value)
-  quiet = { win = win, value = value, ok = false }
-  pcall(api.nvim_cmd, {
-    cmd = "lua",
-    args = { "require('bufferlines.multiline.runtime')._write()" },
-    mods = { noautocmd = true },
-  }, {})
-  local ok = quiet.ok
-  quiet = nil
-  return ok
-end
-
--- :split in the header shows its buffer in a second window with a copy of the header's options.
-local function sweep()
-  for _, win in ipairs(api.nvim_list_wins()) do
-    if not M.owns(win) and vim.b[api.nvim_win_get_buf(win)][marker] == namespace then
-      if api.nvim_get_option_value("fillchars", { scope = "local", win = win }) ~= "" then set_fillchars(win, "") end
-    end
-  end
-end
-
 ---Restore native visibility and dispose owned headers.
 function M.disable()
   if group then api.nvim_del_augroup_by_id(group) end
@@ -430,10 +400,11 @@ function M.enable(config, callbacks)
       M.request(event.event)
     end,
   })
-  -- The header divider depends on these; changing them resizes nothing, so ask for a refresh.
+  -- The row budget reads 'laststatus' and mouse hits are measured in cells that 'ambiwidth'
+  -- changes; neither resizes a window, so ask for a refresh.
   api.nvim_create_autocmd("OptionSet", {
     group = group,
-    pattern = { "laststatus", "fillchars", "ambiwidth" },
+    pattern = { "laststatus", "ambiwidth" },
     callback = function() M.request("OptionSet") end,
   })
   api.nvim_create_autocmd("WinEnter", {
@@ -497,47 +468,6 @@ local function allocate(handle, height)
     winhighlight = "Normal:BufferLinesFill",
   }) do
     vim.wo[handle.win][name] = value
-  end
-end
-
--- Under laststatus=3 the header's own 'fillchars' draws the divider below it. '▔' sits at the top of
--- that cell, so the gap under the last row matches the one above the first, and a left sidebar's
--- separator continues into it with the global vert character. The glyphs have ambiguous width, so
--- under ambiwidth=double (or any other layout) the header keeps the global divider. These are the
--- local values to try, in order.
-local function divider_values()
-  local global, candidates = vim.go.fillchars, { "" }
-  if vim.go.laststatus == 3 and vim.go.ambiwidth == "single" then
-    -- The junction repeats the raw text of the last vert item (escapes and combining marks kept):
-    -- it runs to the next ",key:" or the end, minus a trailing separator unless it is the glyph.
-    -- Without a vert item Neovim draws "│", or "|" when setcellwidths() widens it.
-    local verts, items, start = { "│", "|" }, "," .. global, nil
-    for pos in items:gmatch(",vert:()") do
-      start = pos
-    end
-    if start then
-      local stop = items:find(",%a+:", start + 1)
-      local vert = items:sub(start, (stop or #items + 1) - 1)
-      verts = { #vert > 1 and vert:gsub(",$", "") or vert }
-    end
-    -- Append to the user's items verbatim; Neovim validates. The second form follows a trailing
-    -- separator, and "" keeps the global divider when a glyph is rejected (e.g. setcellwidths()).
-    candidates = {}
-    for _, vert in ipairs(verts) do
-      local divider = "horiz:▔,vertright:" .. vert .. ",verthoriz:" .. vert
-      vim.list_extend(candidates, { global == "" and divider or global .. "," .. divider, global .. divider })
-    end
-    candidates[#candidates + 1] = ""
-  end
-  return candidates
-end
-
-local function decorate(handle)
-  -- Compare with the actual local value each time: a user :set may clear it, and a rejected glyph
-  -- may become valid later. Rejected candidates write nothing, so an unchanged header costs no write.
-  local current = api.nvim_get_option_value("fillchars", { scope = "local", win = handle.win })
-  for _, value in ipairs(divider_values()) do
-    if value == current or set_fillchars(handle.win, value) then return end
   end
 end
 
@@ -744,17 +674,6 @@ function M.flush(reason)
   end
   local tab = api.nvim_get_current_tabpage()
   local ok, err = pcall(render, reason)
-  sweep()
-  -- Every tab's header, even when this render failed: a stale divider elsewhere would still block a
-  -- global ambiwidth change.
-  for _, handle in pairs(handles) do
-    if M.owns(handle.win) then
-      local decorated, problem = pcall(decorate, handle)
-      if ok and not decorated then
-        ok, err = false, problem
-      end
-    end
-  end
   guard = false
   if not ok then unavailable(tab, err) end
 end

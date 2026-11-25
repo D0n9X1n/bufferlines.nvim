@@ -88,22 +88,11 @@ custom areas and disable `hover.enabled` before enabling multiline.
 - The header is a reserved split above the editor, not a taller native tabline. It
   consumes its buffer rows **plus** Neovim's normal split separator/statusline space.
   `max_rows` caps the buffer rows only, not that extra space.
-- With `laststatus=3` that extra space is a window separator row. The header draws its
-  divider there with `▔`, at the top of the cell, so the gap below the last row matches
-  the gap above the first. A left sidebar's vertical separator continues into it with your
-  global `vert` character (even a literal `,`), and your other `fillchars` items are kept.
-  Junctions drawn by windows below the header (a right sidebar or a vertical split of the
-  editor) use those windows' own `fillchars`, which the plugin does not change. With
-  `ambiwidth=double`, another `laststatus`, or a `setcellwidths()` entry that widens `▔`,
-  the header keeps your global divider. The header follows later `laststatus`, `fillchars`
-  and `ambiwidth` changes in every tab.
-  `fillchars` is global-local, so Neovim starts `:set fillchars+=`, `^=` and `-=` from the
-  current window's value. Run from the header, they copy its divider into your global value;
-  use an editor window, `:setglobal`, or a plain `:set fillchars=…` (which is never affected),
-  and assign the value again to undo a copy. A `:split` of the header buffer loses the divider
-  on the next refresh.
-  While the divider is shown, `:set ambiwidth=double` fails with `E835` because `▔` has
-  ambiguous width: disable multiline, change the option, then enable it again.
+- With `laststatus=3` that extra space is a window separator row. It is Neovim's own
+  separator, drawn from your global `fillchars` and `WinSeparator` like any other split, so
+  by default it is a centred `─` that joins a left sidebar with `├`. The plugin sets no
+  window-local `fillchars`, so `:set fillchars+=` and `:set ambiwidth=double` behave as
+  usual while the header is shown.
 - Full-height sidebars remain outside the header area. Wrapping uses the header window's
   actual width; native sidebar offsets are not repeated there. Opening or resizing a
   sidebar keeps existing window IDs intact.
