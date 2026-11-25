@@ -1737,6 +1737,42 @@ describe("Multiline runtime", function()
     assert.equals("", header_fcs(second))
   end)
 
+  it("writes no fillchars and runs no user OptionSet handler while it refreshes", function()
+    -- A started child: OptionSet does not fire while the test runner itself is still starting up.
+    start_child()
+    child_lua([=[
+      vim.cmd("set laststatus=3 fillchars=vert:X")
+      runtime.flush("test")
+      vim.api.nvim_set_current_win(runtime.handles()[tab].win)
+      vim.cmd("split")
+      vim.api.nvim_set_current_win(editor)
+      fired = 0
+      vim.api.nvim_create_autocmd("OptionSet", { pattern = "fillchars", callback = function() fired = fired + 1 end })
+      vim.cmd("tabnew")
+      for _ = 1, 3 do runtime.flush("test") end
+      vim.cmd("tabprevious")
+      for _ = 1, 3 do runtime.flush("test") end
+    ]=])
+    assert.equals(0, child_lua("return fired"))
+  end)
+
+  it("does not re-render the header when only fillchars changes", function()
+    start_child()
+    child_lua([=[
+      vim.cmd("set laststatus=3")
+      runtime.flush("test")
+      renders = 0
+      local frame_hook = hooks.frame
+      hooks.frame = function(...) renders = renders + 1; return frame_hook(...) end
+    ]=])
+    child_lua("vim.cmd('set fillchars=vert:Y')")
+    sync_child()
+    -- Control: a laststatus change in the same child does request a render.
+    assert.equals(0, child_lua("return renders"))
+    child_lua("vim.cmd('set laststatus=2')")
+    settle(function() return child_lua("return renders") > 0 end)
+  end)
+
   it("lets ambiwidth=double be set while the header is shown", function()
     vim.o.laststatus = 3
     vim.go.fillchars = "vert:X,eob:@"
